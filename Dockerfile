@@ -18,7 +18,9 @@ COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-RUN npm ci --omit=dev --no-audit --no-fund -w @pcs/api -w @pcs/shared && npm cache clean --force
+# Runtime needs no package manager: drop npm/corepack (removes their bundled CVEs from the image)
+RUN npm ci --omit=dev --no-audit --no-fund -w @pcs/api -w @pcs/shared && npm cache clean --force \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /root/.npm
 COPY packages/shared/src ./packages/shared/src
 COPY apps/api/src ./apps/api/src
 COPY apps/api/migrations ./apps/api/migrations
