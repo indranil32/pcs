@@ -1,0 +1,17 @@
+{
+  "name": "pcs",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Maqta PCS — multi-tenant Port Community System (TradeTech, AD Ports Group)",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "db:migrate": "npm -w @pcs/api run migrate",
+    "db:seed": "npm -w @pcs/api run seed",
+    "dev:api": "npm -w @pcs/api run dev",
+    "dev:web": "npm -w @pcs/web run dev",
+    "build": "npm -w @pcs/web run build",
+    "test": "npm -w @pcs/api run test",
+    "typecheck": "npm -w @pcs/api run typecheck && npm -w @pcs/web run typecheck"
+  },
+  "engines": { "node": ">=20" }
+}
