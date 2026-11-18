@@ -232,7 +232,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
     log(`seed: ${p.code} scenarios complete`);
   }
   await app.close();
-  log(`seed: done — demo password "${DEMO_PASSWORD}"`);
+  log(process.env.DEMO_PASSWORD ? "seed: done — demo users use the DEMO_PASSWORD secret" : `seed: done — demo password "${DEMO_PASSWORD}"`);
 }
 
 if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {

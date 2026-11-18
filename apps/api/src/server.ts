@@ -11,7 +11,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './core/config.js';
 import { authenticate, sendError } from './core/context.js';
-import { startWorkers } from './workers.js';
 import { modules } from './modules/index.js';
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
@@ -66,18 +65,4 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     });
   }
   return app;
-}
-
-if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')) {
-  if (process.env.MIGRATE_ON_START !== 'false') {
-    const { migrate } = await import('./db/migrate.js');
-    await migrate();
-  }
-  if (process.env.SEED_DEMO_DATA === 'true') {
-    const { seed } = await import('./db/seed.js');
-    await seed();
-  }
-  const app = await buildApp();
-  await app.listen({ port: config.port, host: '0.0.0.0' });
-  if (config.workers) startWorkers(app.log);
 }

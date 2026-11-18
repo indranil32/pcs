@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
     "test": "node --import tsx --test test/*.test.ts",
@@ -24,13 +24,13 @@
     "fastify": "^5.12.8",
     "pg": "^8.23.1",
     "pino-pretty": "^13.2.0",
+    "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }

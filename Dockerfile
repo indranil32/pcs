@@ -29,4 +29,4 @@ COPY --from=build /app/apps/web/dist ./apps/web/dist
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://localhost:4000/health || exit 1
-CMD ["node", "--import", "tsx", "apps/api/src/server.ts"]
+CMD ["node", "--import", "tsx", "apps/api/src/main.ts"]
