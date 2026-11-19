@@ -27,6 +27,8 @@ const Tariffs = lazy(() => import('./pages/Tariffs'));
 const Edi = lazy(() => import('./pages/Edi'));
 const PortMap = lazy(() => import('./pages/PortMap'));
 const Admin = lazy(() => import('./pages/Admin'));
+const Inland = lazy(() => import('./pages/Inland'));
+const Facility = lazy(() => import('./pages/Facility'));
 const Permit = lazy(() => import('./pages/Permit'));
 const Verify = lazy(() => import('./pages/Verify'));
 
@@ -53,6 +55,8 @@ function Protected() {
           <Route path="/gate" element={<Gate />} />
           <Route path="/barges" element={<Barges />} />
           <Route path="/rail" element={<Rail />} />
+          <Route path="/inland" element={<Inland />} />
+          <Route path="/inland/:id" element={<Facility />} />
           <Route path="/services" element={<Services />} />
           <Route path="/finance" element={<Finance />} />
           <Route path="/finance/invoices/:id" element={<Finance />} />

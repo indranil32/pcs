@@ -6,9 +6,10 @@ import { teuOf } from '@pcs/shared';
 import { one, many, insert, update, nextNo, type Db } from '../core/db.js';
 import { tx, audit, emit, notify, requireRole, hasRole, isAuthority, getTenant, badRequest, notFound, conflict, forbidden, type Actor } from '../core/context.js';
 
-export const BILLABLE = ['vessel_call', 'barge_call', 'delivery_order', 'truck_appointment', 'service_request'] as const;
+export const BILLABLE = ['vessel_call', 'barge_call', 'delivery_order', 'truck_appointment', 'service_request', 'inland_transfer', 'facility_move', 'cfs_job', 'depot_repair'] as const;
 const APPLIES: Record<string, string> = {
   vessel_call: 'VESSEL_CALL', barge_call: 'BARGE_CALL', delivery_order: 'DELIVERY_ORDER', truck_appointment: 'TRUCK_APPOINTMENT', service_request: 'SERVICE_REQUEST',
+  inland_transfer: 'INLAND_TRANSFER', facility_move: 'FACILITY_MOVE', cfs_job: 'CFS_JOB', depot_repair: 'DEPOT_REPAIR',
 };
 
 interface Line { tariff_code: string; description: string; quantity: number; rate: number; amount: number }
@@ -43,6 +44,33 @@ async function billingSubject(c: Db, entityType: string, id: string) {
       if (!r) return null;
       return { customer: r.requester_org_id, reference: `${r.request_no} ${r.service_type} by ${r.provider_name}`, measures: {}, attrs: {}, direct: r.unit_price ? [{ tariff_code: `SVC-${r.service_type}`, description: `${r.service_type} (${r.unit})`, quantity: Number(r.quantity), rate: Number(r.unit_price), amount: round(Number(r.quantity) * Number(r.unit_price)) }] : [] };
     }
+    case 'inland_transfer': {
+      const r = await one(c, `SELECT it.*, f.name AS facility_name, (SELECT coalesce(sum(CASE WHEN left(k.iso_type,1) IN ('4','L') THEN 2 ELSE 1 END),0) FROM unnest(it.containers) n
+          JOIN LATERAL (SELECT iso_type FROM containers WHERE container_no=n ORDER BY updated_at DESC LIMIT 1) k ON true) AS teu FROM inland_transfers it JOIN facilities f ON f.id=it.facility_id WHERE it.id=$1`, [id]);
+      if (!r) return null;
+      return { customer: r.requester_org_id, reference: `${r.transfer_no} ${r.direction === 'TO_FACILITY' ? '→' : '←'} ${r.facility_name}`, measures: { PER_CALL: 1, PER_UNIT: r.containers.length, PER_TEU: Number(r.teu) }, attrs: { direction: r.direction, purpose: r.mode } };
+    }
+    case 'facility_move': {
+      // Lift on/off at the facility gate plus storage beyond the facility's free days
+      const r = await one(c, `SELECT m.*, f.name AS facility_name, f.free_days, f.type AS facility_type FROM facility_moves m JOIN facilities f ON f.id=m.facility_id WHERE m.id=$1`, [id]);
+      if (!r || r.result !== 'ACCEPTED') return null;
+      let customer = r.line_org_id ?? r.haulier_org_id;
+      if (r.purpose === 'IMPORT_DELIVERY') customer = (await one(c, 'SELECT requester_org_id FROM delivery_orders WHERE do_no=$1', [r.reference]))?.requester_org_id ?? customer;
+      if (!customer) return null;
+      const storage = r.direction === 'OUT' && r.dwell_days ? Math.max(0, r.dwell_days - r.free_days) : 0;
+      return { customer, reference: `${r.eir_no} ${r.container_no ?? r.reference ?? ''} ${r.facility_name}`.trim(), measures: { PER_CALL: r.container_no ? 1 : 0, PER_UNIT_DAY: storage }, attrs: { direction: r.direction, purpose: r.purpose, facility_type: r.facility_type } };
+    }
+    case 'cfs_job': {
+      const r = await one(c, `SELECT j.*, f.name AS facility_name, (SELECT coalesce(sum(volume_m3),0) FROM cfs_lots WHERE job_id=j.id) AS m3, (SELECT coalesce(sum(weight_kg),0) FROM cfs_lots WHERE job_id=j.id) AS kg,
+          (SELECT coalesce(sum(coalesce(packages_received, packages)),0) FROM cfs_lots WHERE job_id=j.id) AS pkgs FROM cfs_jobs j JOIN facilities f ON f.id=j.facility_id WHERE j.id=$1`, [id]);
+      if (!r) return null;
+      return { customer: r.requester_org_id, reference: `${r.job_no} ${r.type.toLowerCase()} ${r.container_no}`, measures: { PER_CALL: 1, PER_M3: Number(r.m3), PER_TONNE: Number(r.kg) / 1000, PER_UNIT: Number(r.pkgs) }, attrs: { direction: r.type } };
+    }
+    case 'depot_repair': {
+      const r = await one(c, 'SELECT * FROM depot_repairs WHERE id=$1', [id]);
+      if (!r) return null;
+      return { customer: r.line_org_id, reference: `${r.estimate_no} ${r.container_no}`, measures: {}, attrs: {}, direct: (r.items as any[]).map((i) => ({ tariff_code: 'MR-REPAIR', description: `${i.component}: ${i.repair} (${i.damage})`, quantity: 1, rate: Number(i.amount), amount: Number(i.amount) })) };
+    }
   }
   return null;
 }
@@ -64,6 +92,7 @@ export async function generateInvoice(c: Db, a: Actor, entityType: string, entit
     if (cond.vesselTypes && !cond.vesselTypes.includes(subj.attrs.vessel_type)) continue;
     if (cond.purposes && !cond.purposes.includes(subj.attrs.purpose)) continue;
     if (cond.directions && !cond.directions.includes(subj.attrs.direction)) continue;
+    if (cond.facilityTypes && !cond.facilityTypes.includes(subj.attrs.facility_type)) continue;
     const qty = Number(subj.measures[tf.basis] ?? 0);
     if (!qty) continue;
     let amount = round(qty * Number(tf.rate));
@@ -90,8 +119,8 @@ export default async function finance(app: FastifyInstance) {
   // ----- Tariffs -----
   app.get('/tariffs', async (req) => tx(req, (c) => many(c, 'SELECT * FROM tariffs ORDER BY applies_to, code')));
   const tariffSchema = z.object({
-    code: z.string().min(2), name: z.string().min(2), appliesTo: z.enum(['VESSEL_CALL', 'BARGE_CALL', 'DELIVERY_ORDER', 'TRUCK_APPOINTMENT', 'SERVICE_REQUEST']),
-    basis: z.enum(['PER_CALL', 'PER_GT', 'PER_LOA_DAY', 'PER_TEU', 'PER_TONNE', 'PER_UNIT']), rate: z.number().nonnegative(),
+    code: z.string().min(2), name: z.string().min(2), appliesTo: z.enum(['VESSEL_CALL', 'BARGE_CALL', 'DELIVERY_ORDER', 'TRUCK_APPOINTMENT', 'SERVICE_REQUEST', 'INLAND_TRANSFER', 'FACILITY_MOVE', 'CFS_JOB']),
+    basis: z.enum(['PER_CALL', 'PER_GT', 'PER_LOA_DAY', 'PER_TEU', 'PER_TONNE', 'PER_UNIT', 'PER_M3', 'PER_UNIT_DAY']), rate: z.number().nonnegative(),
     minAmount: z.number().nonnegative().optional().nullable(), conditions: z.record(z.string(), z.any()).default({}), active: z.boolean().default(true),
   });
   app.post('/tariffs', async (req) => {

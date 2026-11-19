@@ -37,5 +37,12 @@ await check('tenant isolation', async () => {
   const calls = await get('/api/vessel-calls', tok);
   if (calls.some((c) => !c.call_no.startsWith('ZZBET'))) throw new Error('foreign port data visible');
 });
+await check('inland facilities (dry port, depot, CFS)', async () => {
+  const tok = await login('portadmin@zzalp.demo');
+  const f = await get('/api/facilities', tok);
+  for (const t of ['DRY_PORT', 'EMPTY_DEPOT', 'CFS']) if (!f.some((x) => x.type === t)) throw new Error(`no ${t}`);
+  await get('/api/inland-transfers', tok);
+  await get(`/api/facilities/${f[0].id}`, tok);
+});
 if (failed) { console.error(`${failed} smoke check(s) failed`); process.exit(1); }
 console.log('all smoke checks passed');

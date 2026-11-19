@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
   LayoutDashboard, Ship, CalendarRange, ShieldCheck, Package, FileCheck2, Truck, DoorOpen, Waves, TrainFront, Anchor, Receipt,
-  Percent, ArrowLeftRight, Map, Settings, Bell, LogOut, ChevronDown, Globe, BookOpen,
+  Percent, ArrowLeftRight, Map, Settings, Bell, LogOut, ChevronDown, Globe, BookOpen, Warehouse,
 } from 'lucide-react';
 import type { Role } from '@pcs/shared';
 import { useAuth } from '../lib/auth';
@@ -32,6 +32,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/gate', key: 'gate', icon: DoorOpen, roles: ['TERMINAL_OPERATOR', 'PORT_ADMIN'] },
       { to: '/barges', key: 'barges', icon: Waves, roles: ['BARGE_OPERATOR', 'HARBOUR_MASTER', 'TERMINAL_OPERATOR', 'PORT_ADMIN', 'EXECUTIVE'] },
       { to: '/rail', key: 'rail', icon: TrainFront, roles: ['RAIL_OPERATOR', 'TERMINAL_OPERATOR', 'HARBOUR_MASTER', 'PORT_ADMIN', 'EXECUTIVE'] },
+      { to: '/inland', key: 'inland', icon: Warehouse, roles: ['FACILITY_OPERATOR', 'FREIGHT_FORWARDER', 'SHIPPING_LINE', 'SHIPPING_AGENT', 'HAULIER', 'RAIL_OPERATOR', 'CUSTOMS', 'TERMINAL_OPERATOR', 'PORT_ADMIN', 'EXECUTIVE', 'FINANCE'] },
     ],
   },
   {

@@ -25,6 +25,7 @@ const D: Record<string, [string, string, string]> = {
   gate: ['Gate console', 'Consolă poartă', 'Консоль воріт'],
   barges: ['Barge calls', 'Escale barje', 'Заходи барж'],
   rail: ['Rail', 'Feroviar', 'Залізниця'],
+  inland: ['Dry ports, depots & CFS', 'Porturi uscate, depozite și CFS', 'Сухі порти, депо та CFS'],
   services: ['Marine services', 'Servicii portuare', 'Морські послуги'],
   finance: ['Invoices & payments', 'Facturi și plăți', 'Рахунки та платежі'],
   tariffs: ['Tariffs', 'Tarife', 'Тарифи'],

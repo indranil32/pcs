@@ -12,12 +12,15 @@ tariffs, currency, VAT, languages, truck slot capacity, barge/rail operations) r
 
 | Area (PRD module) | Capabilities |
 |---|---|
-| **Platform** (FR-PLT, FR-ORG) | Port-per-tenant with PostgreSQL row-level security · 18 roles · JWT sign-in and `x-api-key` for systems · organisation self-registration with port-admin approval · notifications · audit trail on every change · documents with SHA-256 · stakeholder messages · multilingual portal (language packs per port) |
+| **Platform** (FR-PLT, FR-ORG) | Port-per-tenant with PostgreSQL row-level security · 19 roles · JWT sign-in and `x-api-key` for systems · organisation self-registration with port-admin approval · notifications · audit trail on every change · documents with SHA-256 · stakeholder messages · multilingual portal (language packs per port) |
 | **Vessel calls** (FR-VES) | Berthing request → berth allocation (LOA, under-keel clearance and window-clash checks, audited override) → pre-arrival notification → arrival → all fast → departure · berth plan Gantt · cancellation |
 | **Single Window** (FR-SWN) | IMO FAL 1–7 forms with validation (FAL 4 excluded by default, per IPCSA/GDPR) · each agency approves, rejects or queries independently, with the agency list configured per port · port entry permit issued automatically when all agencies approve, printable with a QR code anyone can verify · departure clearance |
 | **Cargo & customs** (FR-CGO, FR-CUS, FR-CON) | Manifests (portal, REST or EDI CUSCAR) with ISO 6346 / HS / UN/LOCODE validation and amendment versioning · B/L-level customs status exchange (declared → inspection → released / held) · automatic customs holds · container tracking and dwell time |
 | **eDO & gate** (FR-GAT) | Electronic delivery order (forwarder requests, shipping line issues with a PIN) · slot-based truck appointment system with capacity per terminal · gate console checking the appointment, eDO, customs release and holds in one step · every gate attempt logged |
-| **Hinterland** (FR-TRS) | Inland barge calls (ENI) · rail visits with wagon lists |
+| **Hinterland** (FR-TRS) | Inland barge calls (ENI) · rail visits with wagon lists · live picture fed by a VTS over `POST /api/ais/positions` |
+| **Dry ports / ICD** (FR-ICD) | Inland facilities register (bonded flag, distance, capacity, free days, transit time) · **bonded transfers** port ↔ dry port by truck, rail or barge: uncleared cargo may only move to a bonded facility; customs approves the transit in the Single Window queue, a transit document with a deadline is issued, the terminal or carrier dispatches, the facility confirms arrival, and overdue or late transits are flagged to customs · customs clearance and eDO delivery at the dry port gate (DO / PIN, customs release, holds checked) · export transfers back to the port terminal |
+| **Empty depots** (FR-DEP) | Empty returns with an equipment interchange receipt (EIR) and condition survey (IICL-style damage codes) · M&R repair estimates priced at the port's labour rate, approved or rejected by the owning line, then completed · empty release orders per booking and ISO type, with automatic allocation of a sound empty at the gate · stock by line, type and condition |
+| **CFS** (FR-CFS) | LCL destuffing into house-B/L lots with tally (shortages, damage, shed location) · per-lot declaration, customs release, hold or inspection · partial deliveries with EIR · export cargo pre-advice and receipt · stuffing of customs-released lots into an empty with a seal, then export transfer to the port · storage and handling billed through the tariff book (per container, container-day beyond free days, m³, TEU) |
 | **Marine services** (FR-MKT, FR-VAS) | Provider catalogue · requests linked to the vessel call · accept, schedule and complete · auto-billing |
 | **Finance** (FR-FIN) | Tariff book (per call / GT / LOA-day / TEU / tonne / unit, with minimums and conditions) · invoices rated automatically at each billable event · VAT per port · payment (mock gateway) · ERP journal export |
 | **Integration** (FR-INT) | UN/EDIFACT engine: inbound CUSCAR, CODECO, COARRI, BERMAN, CUSRES; outbound APERAK and CUSCAR · webhooks signed with HMAC · transactional outbox (Kafka-ready) · OpenAPI 3 at `/api/docs` |
@@ -78,7 +81,7 @@ barges and rail, and **Demo Port Beta (ZZBET)**, with USD, immigration and marit
 vessels, B/Ls and containers are synthetic; UN/LOCODEs use the ISO user-assigned country code `ZZ`, and map
 coordinates sit in open ocean near 0°/0°. Accounts follow `<role>@zzalp.demo` / `<role>@zzbet.demo`. Roles: agent,
 harbour, customs, border, health, immigration, maritime, line, forwarder, haulier, terminal, barge, rail, services,
-finance, portadmin, exec. The platform admin is `admin@pcs.demo`. The password is `DEMO_PASSWORD` (default
+finance, portadmin, exec, and the inland facility operators icd (dry port), depot (empty depot) and cfs. The platform admin is `admin@pcs.demo`. The password is `DEMO_PASSWORD` (default
 `PcsDemo!2026` locally; generated on Azure).
 
 Suggested demo path (about 15 min): agent creates a call, submits the berthing request → harbour master allocates
@@ -86,6 +89,12 @@ a berth (try an undersized berth to see the checks) → agent fills in the FAL f
 agency approves in the clearance queue → the permit appears with its QR code → agent submits the manifest →
 forwarder links a declaration → customs releases → forwarder requests the eDO, the line issues it → haulier books a
 slot → terminal processes gate in and out → departure → invoice → pay.
+
+Inland path (about 10 min): forwarder requests a bonded transfer of an uncleared B/L to the dry port → customs approves
+it in the clearance queue (transit document issued) → terminal dispatches → `icd` confirms arrival → customs releases
+→ eDO → `icd` delivers at its gate. At the depot, `depot` receives an empty with a damage survey and sends a repair
+estimate that the `line` approves; the line issues an empty release that the depot fulfils. At the CFS, `cfs` destuffs
+an LCL box into house B/Ls, customs releases a lot, and the CFS delivers it in part.
 
 ## Deploy to Azure (GitHub Actions)
 

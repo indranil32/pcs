@@ -3,10 +3,10 @@ import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { config } from '../core/config.js';
-import { withTenant, one, insert } from '../core/db.js';
+import { withTenant, one, many, insert } from '../core/db.js';
 import { PORTS, VESSELS, LOCATIONS, cntr } from './seed-data.js';
 
-export const SEED_VERSION = '2-generic';
+export const SEED_VERSION = '3-inland';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'PcsDemo!2026';
 const H = 36e5, D = 864e5;
 
@@ -74,6 +74,14 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
         const login = role === 'SERVICE_PROVIDER' ? (sp++ === 0 ? 'services' : 'bunkers') : ROLE_LOGIN[role];
         await addUser(o.id, [role], login, `${name.replace(' (demo)', '')} User`);
         pid.orgs[login === 'bunkers' ? 'BUNKERS' : role] = o.id;
+      }
+      pid.facilities = {} as Record<string, string>;
+      for (const fc of p.facilities) {
+        const o = await insert(c, 'organisations', { tenant_id: t.id, name: fc.operator, type: 'INLAND_FACILITY', email: `${fc.login}@${dom}`, status: 'ACTIVE', registration_no: `IF-${fc.code}` });
+        await addUser(o.id, ['FACILITY_OPERATOR'], fc.login, `${fc.operator.replace(' (demo)', '')} Supervisor`);
+        const f = await insert(c, 'facilities', { tenant_id: t.id, code: fc.code, name: fc.name, type: fc.type, operator_org_id: o.id, location: fc.location, lat: fc.lat, lon: fc.lon, distance_km: fc.distanceKm, bonded: fc.bonded, capacity_teu: fc.capacityTeu, capacity_m3: (fc as any).capacityM3 ?? null, transit_hours: (fc as any).transitHours ?? 24 });
+        pid.facilities[fc.type] = f.id;
+        pid.orgs[`FAC_${fc.type}`] = o.id;
       }
       for (const [code, name, applies, basis, rate, min] of p.tariffs) await insert(c, 'tariffs', { tenant_id: t.id, code, name, applies_to: applies, basis, rate, min_amount: min, currency: p.currency });
       const cur = p.currency, k = p.currency === 'USD' ? 0.25 : 0.22;
@@ -182,7 +190,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
     await fal(c1.id, v1, true);
     await call('agent', 'POST', `/vessel-calls/${c1.id}/pre-arrival`);
     await clearAll(c1.id, 'ARRIVAL');
-    const m1 = await call('agent', 'POST', `/vessel-calls/${c1.id}/manifests`, manifest(6));
+    const m1 = await call('agent', 'POST', `/vessel-calls/${c1.id}/manifests`, manifest(7));
     await call('harbour', 'POST', `/vessel-calls/${c1.id}/arrived`, { at: new Date(eta1.getTime() + 1.5 * H) });
     await call('harbour', 'POST', `/vessel-calls/${c1.id}/berthed`, { at: new Date(eta1.getTime() + 4 * H) });
     const bls = await call('forwarder', 'GET', `/bls?callId=${c1.id}`);
@@ -243,6 +251,61 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
     const codeco = `UNA:+.? 'UNB+UNOC:3+${p.terminals[0].code}+${p.code}+${new Date().toISOString().slice(2, 10).replace(/-/g, '')}:1200+DEMO0001'UNH+1+CODECO:D:95B:UN'BGM+34+GI001+9'DTM+7:${new Date().toISOString().slice(0, 16).replace(/[-T:]/g, '')}:203'EQD+CN+${bl0.containers[0].container_no}+45G1:102:5++3+5'UNT+5+1'UNZ+1+DEMO0001'`;
     await call('terminal', 'POST', '/edi/inbound', { raw: codeco });
     void m1;
+
+    // ---------------- inland facilities: dry port, empty depot, CFS ----------------
+    const term0 = pid.terminals[p.terminals[0].code];
+    const icd = pid.facilities.DRY_PORT, depot = pid.facilities.EMPTY_DEPOT, cfs = pid.facilities.CFS;
+    const blC = async (i: number) => (await call('forwarder', 'GET', `/bls/${bls[i].id}`)).containers.map((k: any) => k.container_no);
+    const approveTransit = async (id: string) => { for (const ap of (await call('portadmin', 'GET', `/approvals?entityId=${id}`)).filter((x: any) => x.status === 'PENDING')) await call('customs', 'POST', `/approvals/${ap.id}/decision`, { status: 'APPROVED', remarks: 'Transit under bond approved' }); };
+    // Dry port: uncleared B/L moved by rail under customs bond, cleared and delivered inland
+    const icdBoxes = await blC(4);
+    const t1 = await call('forwarder', 'POST', '/inland-transfers', { direction: 'TO_FACILITY', facilityId: icd, terminalId: term0, blId: bls[4].id, containers: icdBoxes, mode: 'RAIL', carrierOrgId: pid.orgs.RAIL_OPERATOR, remarks: 'Clearance at the dry port' });
+    await approveTransit(t1.id);
+    await call('terminal', 'POST', `/inland-transfers/${t1.id}/dispatch`);
+    await call('icd', 'POST', `/inland-transfers/${t1.id}/arrive`);
+    await call('forwarder', 'POST', `/bls/${bls[4].id}/declaration`, { declarationNo: `${p.plates}DEC2026ICD1` });
+    await call('customs', 'POST', `/bls/${bls[4].id}/customs-status`, { status: 'RELEASED', remarks: 'Released at the dry port' });
+    const dIcd = await call('forwarder', 'POST', '/delivery-orders', { blId: bls[4].id, haulierOrgId: pid.orgs.HAULIER });
+    await call('line', 'POST', `/delivery-orders/${dIcd.id}/issue`, { validUntil: new Date(Date.now() + 7 * D) });
+    await call('icd', 'POST', `/facilities/${icd}/gate`, { direction: 'OUT', purpose: 'IMPORT_DELIVERY', containerNo: icdBoxes[0], truckPlate: `${p.plates}55ICD`, haulierOrgId: pid.orgs.HAULIER, reference: dIcd.do_no });
+    // a second transfer waiting for customs
+    await call('forwarder', 'POST', '/inland-transfers', { direction: 'TO_FACILITY', facilityId: icd, terminalId: term0, blId: bls[5].id, containers: await blC(5), mode: 'TRUCK', carrierOrgId: pid.orgs.HAULIER });
+
+    // Empty depot: empties returned from earlier imports, one damaged with a repair estimate, a release order in progress
+    const delivered: any[] = await withTenant(pid.tenant, (c) => many(c, `SELECT DISTINCT ON (container_no) container_no, iso_type FROM containers WHERE status='GATED_OUT' AND full_empty='F' AND call_id = ANY($1) ORDER BY container_no, updated_at DESC LIMIT 9`, [history]));
+    for (const [i, k] of delivered.entries()) {
+      const damaged = i === 2;
+      await call('depot', 'POST', `/facilities/${depot}/gate`, { direction: 'IN', purpose: 'EMPTY_RETURN', containerNo: k.container_no, isoType: k.iso_type, truckPlate: `${p.plates}${70 + i}EMP`, haulierOrgId: pid.orgs.HAULIER,
+        condition: damaged ? 'DAMAGED' : 'SOUND', damages: damaged ? [{ component: 'Right side panel', code: 'DT', remarks: '30 cm dent' }, { component: 'Door', code: 'BT', remarks: 'Locking bar bent' }] : [] });
+    }
+    if (delivered[2]) await call('depot', 'POST', '/depot/repairs', { facilityId: depot, containerNo: delivered[2].container_no, items: [{ component: 'Right side panel', damage: 'DT', repair: 'Straighten panel', hours: 2.5, material: 40 }, { component: 'Door', damage: 'BT', repair: 'Replace locking bar', hours: 1, material: 85 }] });
+    const iso = delivered[0]?.iso_type ?? '22G1';
+    const rel = await call('line', 'POST', '/depot/releases', { facilityId: depot, bookingNo: `${p.owner}BK2026001`, isoType: iso, quantity: 3, haulierOrgId: pid.orgs.HAULIER, validUntil: new Date(Date.now() + 5 * D) });
+    await call('depot', 'POST', `/facilities/${depot}/gate`, { direction: 'OUT', purpose: 'EMPTY_RELEASE', reference: rel.release_no, truckPlate: `${p.plates}81EXP`, haulierOrgId: pid.orgs.HAULIER });
+
+    // CFS: LCL import container moved under bond and destuffed into house B/Ls; export lots received for stuffing
+    const lcl = (await blC(6))[0];
+    const t2 = await call('forwarder', 'POST', '/inland-transfers', { direction: 'TO_FACILITY', facilityId: cfs, terminalId: term0, blId: bls[6].id, containers: [lcl], mode: 'TRUCK', carrierOrgId: pid.orgs.HAULIER, remarks: 'LCL consolidation — destuff at CFS' });
+    await approveTransit(t2.id);
+    await call('haulier', 'POST', `/inland-transfers/${t2.id}/dispatch`);
+    await call('cfs', 'POST', `/inland-transfers/${t2.id}/arrive`);
+    const job = await call('forwarder', 'POST', '/cfs/jobs', { facilityId: cfs, type: 'DESTUFF', containerNo: lcl, lots: [
+      { houseBl: `HB${p.plates}2026-101`, consignee: 'Corner Stores (demo)', description: 'Household goods', packages: 40, weightKg: 3200, volumeM3: 14.5 },
+      { houseBl: `HB${p.plates}2026-102`, consignee: 'Bright Electronics (demo)', description: 'Small appliances', packages: 65, weightKg: 4100, volumeM3: 19.2 },
+      { houseBl: `HB${p.plates}2026-103`, consignee: 'Garden Supply (demo)', description: 'Garden tools', packages: 22, weightKg: 1900, volumeM3: 6.8 },
+    ] });
+    await call('cfs', 'POST', `/cfs/jobs/${job.id}/start`);
+    await call('cfs', 'POST', `/cfs/jobs/${job.id}/complete`, { tally: job.lots.map((l: any, i: number) => ({ lotId: l.id, packagesReceived: i === 1 ? 63 : l.packages, packagesDamaged: i === 1 ? 1 : 0, location: `SHED-A/${i + 1}` })) });
+    await call('forwarder', 'POST', `/cfs/lots/${job.lots[0].id}/declaration`, { declarationNo: `${p.plates}DEC2026CFS1` });
+    await call('customs', 'POST', `/cfs/lots/${job.lots[0].id}/customs-status`, { status: 'RELEASED' });
+    await call('cfs', 'POST', `/cfs/lots/${job.lots[0].id}/deliver`, { packages: 25, truckPlate: `${p.plates}12LCL` });
+    await call('forwarder', 'POST', `/cfs/lots/${job.lots[1].id}/declaration`, { declarationNo: `${p.plates}DEC2026CFS2` });
+    for (const [i, hb] of ['HBX-2026-501', 'HBX-2026-502'].entries()) {
+      const lot = await call('forwarder', 'POST', '/cfs/lots', { facilityId: cfs, houseBl: `${p.plates}${hb}`, consignee: ['Overseas Retail (demo)', 'Export Buyers (demo)'][i], description: ['Textiles', 'Furniture parts'][i], packages: 30 + i * 12, weightKg: 2400 + i * 900, volumeM3: 11 + i * 6 });
+      await call('cfs', 'POST', `/cfs/lots/${lot.id}/receive`, { packagesReceived: lot.packages, truckPlate: `${p.plates}3${i}EXP`, location: `SHED-B/${i + 1}` });
+      await call('forwarder', 'POST', `/cfs/lots/${lot.id}/declaration`, { declarationNo: `${p.plates}EXP2026${500 + i}` });
+      if (i === 0) await call('customs', 'POST', `/cfs/lots/${lot.id}/customs-status`, { status: 'RELEASED', remarks: 'Export cleared' });
+    }
     log(`seed: ${p.code} scenarios complete`);
   }
   await app.close();

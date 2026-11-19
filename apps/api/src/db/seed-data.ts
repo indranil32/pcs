@@ -28,6 +28,14 @@ const AUTHORITIES_B = [
   ['Maritime Administration (demo)', 'GOVERNMENT_AGENCY', ['MARITIME_SAFETY']],
 ] as const;
 
+const INLAND_TARIFFS = (k: number) => [
+  ['IT-TEU', 'Bonded inland transfer handling (per TEU)', 'INLAND_TRANSFER', 'PER_TEU', 12 * k, null],
+  ['FM-LIFT', 'Facility lift on / lift off (per container)', 'FACILITY_MOVE', 'PER_CALL', 18 * k, null],
+  ['FM-STOR', 'Facility storage beyond free days (per container-day)', 'FACILITY_MOVE', 'PER_UNIT_DAY', 6 * k, null],
+  ['CFS-JOB', 'CFS container handling (stuffing / destuffing)', 'CFS_JOB', 'PER_CALL', 45 * k, null],
+  ['CFS-M3', 'CFS cargo handling (per m3)', 'CFS_JOB', 'PER_M3', 9 * k, null],
+] as const;
+
 export const PORTS = [
   {
     code: 'ZZALP', name: 'Demo Port Alpha', country: 'ZZ', timezone: 'UTC', currency: 'EUR', lat: 0.02, lon: 0.02,
@@ -61,6 +69,12 @@ export const PORTS = [
       ['VC-LIGHT', 'Light and navigation dues', 'VESSEL_CALL', 'PER_CALL', 190, null], ['VC-TEU', 'Infrastructure fee (per TEU)', 'VESSEL_CALL', 'PER_TEU', 3.5, null],
       ['BC-DUES', 'Barge port dues (per tonne)', 'BARGE_CALL', 'PER_TONNE', 0.13, 30], ['DO-FEE', 'eDO processing fee', 'DELIVERY_ORDER', 'PER_CALL', 9, null],
       ['TA-FEE', 'Truck appointment / gate fee', 'TRUCK_APPOINTMENT', 'PER_CALL', 5, null],
+      ...INLAND_TARIFFS(1),
+    ],
+    facilities: [
+      { code: 'ICD1', name: 'North Inland Container Depot', type: 'DRY_PORT', operator: 'Inland Logistics Park (demo)', login: 'icd', location: 'ZZINL', lat: 0.21, lon: -0.31, distanceKm: 86, bonded: true, capacityTeu: 6000, transitHours: 30 },
+      { code: 'DEP1', name: 'Harbour Empty Depot', type: 'EMPTY_DEPOT', operator: 'Harbour Container Services (demo)', login: 'depot', location: 'ZZALP', lat: -0.012, lon: -0.03, distanceKm: 6, bonded: false, capacityTeu: 3500 },
+      { code: 'CFS1', name: 'Alpha Container Freight Station', type: 'CFS', operator: 'Consolidated Cargo Station (demo)', login: 'cfs', location: 'ZZALP', lat: 0.034, lon: -0.022, distanceKm: 4, bonded: true, capacityTeu: 400, capacityM3: 18000, transitHours: 6 },
     ],
     lastPorts: ['ZZNRT', 'ZZSTH', 'ZZEST', 'ZZWST', 'ZZCTR'],
     bargeOrigin: 'ZZRVR', railDestination: 'ZZINL',
@@ -95,6 +109,12 @@ export const PORTS = [
       ['VC-LIGHT', 'Light dues', 'VESSEL_CALL', 'PER_CALL', 220, null], ['VC-TEU', 'Cargo dues (per TEU)', 'VESSEL_CALL', 'PER_TEU', 4, null],
       ['BC-DUES', 'Barge dues (per tonne)', 'BARGE_CALL', 'PER_TONNE', 0.15, 35], ['DO-FEE', 'eDO processing fee', 'DELIVERY_ORDER', 'PER_CALL', 10, null],
       ['TA-FEE', 'Truck appointment fee', 'TRUCK_APPOINTMENT', 'PER_CALL', 6, null],
+      ...INLAND_TARIFFS(1.15),
+    ],
+    facilities: [
+      { code: 'DRY1', name: 'Central Dry Port', type: 'DRY_PORT', operator: 'Central Dry Port Company (demo)', login: 'icd', location: 'ZZINL', lat: 0.31, lon: 0.62, distanceKm: 140, bonded: true, capacityTeu: 9000, transitHours: 48 },
+      { code: 'ECD1', name: 'Beta Empty Container Depot', type: 'EMPTY_DEPOT', operator: 'Beta Depot Services (demo)', login: 'depot', location: 'ZZBET', lat: 0.03, lon: 0.99, distanceKm: 8, bonded: false, capacityTeu: 2500 },
+      { code: 'CFS1', name: 'Beta Freight Station', type: 'CFS', operator: 'Beta Freight Station Ltd (demo)', login: 'cfs', location: 'ZZBET', lat: 0.012, lon: 1.0, distanceKm: 5, bonded: true, capacityTeu: 300, capacityM3: 12000, transitHours: 6 },
     ],
     lastPorts: ['ZZEST', 'ZZWST', 'ZZNRT', 'ZZSTH', 'ZZCTR'],
     bargeOrigin: 'ZZDLT', railDestination: 'ZZINL',

@@ -21,6 +21,7 @@ export const ROLES = [
   'RAIL_OPERATOR',
   'BARGE_OPERATOR',
   'SERVICE_PROVIDER',   // pilotage, towage, bunkering, waste...
+  'FACILITY_OPERATOR',  // dry port (ICD), empty container depot, container freight station (CFS)
   'FINANCE',
   'EXECUTIVE',          // read-only dashboards
 ] as const;
@@ -39,6 +40,7 @@ export type Agency = (typeof AGENCIES)[number];
 export const ORG_TYPES = [
   'PORT_AUTHORITY', 'GOVERNMENT_AGENCY', 'SHIPPING_AGENT', 'SHIPPING_LINE', 'TERMINAL_OPERATOR',
   'FREIGHT_FORWARDER', 'HAULIER', 'RAIL_OPERATOR', 'BARGE_OPERATOR', 'SERVICE_PROVIDER', 'IMPORTER_EXPORTER',
+  'INLAND_FACILITY',
 ] as const;
 export type OrgType = (typeof ORG_TYPES)[number];
 
@@ -55,6 +57,7 @@ export const ORG_DEFAULT_ROLE: Record<OrgType, Role> = {
   BARGE_OPERATOR: 'BARGE_OPERATOR',
   SERVICE_PROVIDER: 'SERVICE_PROVIDER',
   IMPORTER_EXPORTER: 'FREIGHT_FORWARDER',
+  INLAND_FACILITY: 'FACILITY_OPERATOR',
 };
 
 export const SERVICE_TYPES = [

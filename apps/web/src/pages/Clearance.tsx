@@ -20,8 +20,10 @@ export default function Clearance() {
       <Tabs value={status} onChange={setStatus} tabs={[{ id: 'PENDING', label: t('pending') }, { id: 'QUERY', label: 'Queries' }, { id: 'APPROVED', label: 'Approved' }, { id: 'REJECTED', label: 'Rejected' }, { id: '', label: t('all') }]} />
       <Card pad={false}>
         <Table rows={q.data} loading={q.isLoading} empty="Queue is clear" cols={[
-          { key: 'vessel_name', header: t('vessel'), render: (r) => <button onClick={() => nav(`/vessel-calls/${r.entity_id}`)} className="text-left"><div className="font-medium text-teal-700 hover:underline">{r.vessel_name}</div><div className="text-xs text-slate-500">IMO {r.imo} · {r.call_no}</div></button> },
-          { key: 'agent_name', header: t('agent') },
+          { key: 'vessel_name', header: 'Subject', render: (r) => r.entity_type === 'inland_transfer'
+            ? <button onClick={() => nav('/inland?tab=transfers')} className="text-left"><div className="font-medium text-teal-700 hover:underline">Customs transit {r.transfer_no}</div><div className="text-xs text-slate-500">{r.transfer_direction === 'TO_PORT' ? 'Export' : 'Import'} · {r.facility_name} · {r.transfer_mode?.toLowerCase()} · {r.transfer_containers?.length} cntr</div></button>
+            : <button onClick={() => nav(`/vessel-calls/${r.entity_id}`)} className="text-left"><div className="font-medium text-teal-700 hover:underline">{r.vessel_name}</div><div className="text-xs text-slate-500">IMO {r.imo} · {r.call_no}</div></button> },
+          { key: 'agent_name', header: t('agent'), render: (r) => r.agent_name ?? r.requester_name },
           { key: 'stage', header: 'Stage', render: (r) => label(r.stage) },
           { key: 'agency', header: 'Agency', render: (r) => label(r.agency) },
           { key: 'eta', header: t('eta'), render: (r) => fmtDateTime(r.eta) },

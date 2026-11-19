@@ -170,3 +170,103 @@ test('external AIS feed (VTS) replaces simulated positions on the port map', asy
   const beta = await as('harbour@zzbet.demo', 'GET', '/gis/map');
   assert.ok(!beta.body.vessels.some((v: any) => v.mmsi === '999000777'));
 });
+
+// ---------------- inland facilities: dry port, empty depot, CFS ----------------
+const A = (who: string) => `${who}@zzalp.demo`;
+async function facility(type: string) { return (await as(A('portadmin'), 'GET', `/facilities?type=${type}`)).body[0]; }
+
+test('dry port: bonded transit needs customs approval, a non-bonded facility refuses uncleared cargo, delivery only after release', async () => {
+  const icd = await facility('DRY_PORT');
+  const waiting = (await as(A('forwarder'), 'GET', '/inland-transfers?status=REQUESTED')).body[0];
+  assert.ok(waiting, 'seeded transfer awaiting customs');
+  const ap = (await as(A('customs'), 'GET', `/approvals?entityId=${waiting.id}`)).body[0];
+  assert.equal(ap.transfer_no, waiting.transfer_no);
+  assert.equal((await as(A('customs'), 'POST', `/approvals/${ap.id}/decision`, { status: 'REJECTED', remarks: 'Bond guarantee insufficient' })).status, 200);
+  assert.equal((await as(A('forwarder'), 'GET', '/inland-transfers')).body.find((t: any) => t.id === waiting.id).status, 'REJECTED');
+
+  const terms = (await as(A('portadmin'), 'GET', '/ref/terminals')).body;
+  const plain = await as(A('portadmin'), 'POST', '/facilities', { code: 'ICDX', name: 'Unbonded Yard', type: 'DRY_PORT', bonded: false });
+  assert.equal(plain.status, 200, JSON.stringify(plain.body));
+  const req = { direction: 'TO_FACILITY', terminalId: waiting.terminal_id ?? terms[0].id, blId: waiting.bl_id, containers: waiting.containers, mode: 'TRUCK', carrierOrgId: waiting.carrier_org_id };
+  const refused = await as(A('forwarder'), 'POST', '/inland-transfers', { ...req, facilityId: plain.body.id });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error, /not customs-bonded/);
+  assert.equal((await as(A('agent'), 'POST', `/facilities/${icd.id}/gate`, { direction: 'OUT', purpose: 'IMPORT_DELIVERY', containerNo: waiting.containers[0], truckPlate: 'AL1' })).status, 403);
+
+  const t = (await as(A('forwarder'), 'POST', '/inland-transfers', { ...req, facilityId: icd.id })).body;
+  assert.equal(t.status, 'REQUESTED');
+  assert.equal((await as(A('icd'), 'POST', `/inland-transfers/${t.id}/dispatch`)).status, 403);
+  const ap2 = (await as(A('customs'), 'GET', `/approvals?entityId=${t.id}`)).body[0];
+  await as(A('customs'), 'POST', `/approvals/${ap2.id}/decision`, { status: 'APPROVED' });
+  const approved = (await as(A('forwarder'), 'GET', '/inland-transfers')).body.find((x: any) => x.id === t.id);
+  assert.equal(approved.status, 'CUSTOMS_APPROVED');
+  assert.ok(approved.transit_doc_no && approved.transit_deadline);
+  assert.equal((await as(A('haulier'), 'POST', `/inland-transfers/${t.id}/dispatch`)).status, 200);
+  assert.equal((await as(A('terminal'), 'POST', `/inland-transfers/${t.id}/arrive`)).status, 403, 'only the destination confirms arrival');
+  assert.equal((await as(A('icd'), 'POST', `/inland-transfers/${t.id}/arrive`)).status, 200);
+
+  const inv = (await as(A('icd'), 'GET', `/facilities/${icd.id}`)).body.inventory;
+  const box = inv.find((k: any) => k.container_no === t.containers[0]);
+  assert.ok(box, 'container is in the dry port inventory');
+  const early = (await as(A('icd'), 'POST', `/facilities/${icd.id}/gate`, { direction: 'OUT', purpose: 'IMPORT_DELIVERY', containerNo: t.containers[0], truckPlate: 'AL77ICD' })).body;
+  assert.equal(early.result, 'REJECTED');
+  assert.match(early.reason, /Customs status/);
+});
+
+test('empty depot: EIR on return, line approves repair, release order allocates a sound empty', async () => {
+  const dep = await facility('EMPTY_DEPOT');
+  const view = (await as(A('depot'), 'GET', `/facilities/${dep.id}`)).body;
+  const sound = view.inventory.find((k: any) => k.condition === 'SOUND');
+  const again = (await as(A('depot'), 'POST', `/facilities/${dep.id}/gate`, { direction: 'IN', purpose: 'EMPTY_RETURN', containerNo: sound.container_no, truckPlate: 'AL1EMP' })).body;
+  assert.equal(again.result, 'REJECTED');
+
+  const est = (await as(A('line'), 'GET', '/depot/repairs')).body.find((r: any) => r.status === 'ESTIMATED');
+  assert.ok(est);
+  assert.equal((await as(A('depot'), 'POST', `/depot/repairs/${est.id}/approve`)).status, 403);
+  assert.equal((await as(A('line'), 'POST', `/depot/repairs/${est.id}/approve`)).body.status, 'APPROVED');
+  assert.equal((await as(A('depot'), 'POST', `/depot/repairs/${est.id}/complete`)).body.status, 'COMPLETED');
+  const after = (await as(A('depot'), 'GET', `/facilities/${dep.id}`)).body.inventory.find((k: any) => k.container_no === est.container_no);
+  assert.equal(after.condition, 'SOUND');
+
+  const rel = (await as(A('line'), 'GET', '/depot/releases')).body.find((r: any) => r.status === 'OPEN');
+  const out = (await as(A('depot'), 'POST', `/facilities/${dep.id}/gate`, { direction: 'OUT', purpose: 'EMPTY_RELEASE', reference: rel.release_no, truckPlate: 'AL2EMP' })).body;
+  assert.equal(out.result, 'ACCEPTED', out.reason);
+  assert.ok(out.eir_no && out.container_no);
+  const rel2 = (await as(A('line'), 'GET', '/depot/releases')).body.find((r: any) => r.id === rel.id);
+  assert.equal(rel2.released, rel.released + 1);
+  // a forwarder sees none of the line's depot stock
+  assert.equal((await as(A('forwarder'), 'GET', `/facilities/${dep.id}`)).body.inventory.length, 0);
+});
+
+test('CFS: lots are delivered only after customs release, partial delivery, export stuffing and transfer to the port', async () => {
+  const cfs = await facility('CFS');
+  const lots = (await as(A('cfs'), 'GET', `/cfs/lots?facilityId=${cfs.id}&direction=IMPORT`)).body;
+  const declared = lots.find((l: any) => l.customs_status === 'DECLARED');
+  assert.equal((await as(A('cfs'), 'POST', `/cfs/lots/${declared.id}/deliver`, { packages: 5, truckPlate: 'AL5LCL' })).status, 409);
+  assert.equal((await as(A('forwarder'), 'POST', `/cfs/lots/${declared.id}/customs-status`, { status: 'RELEASED' })).status, 403);
+  await as(A('customs'), 'POST', `/cfs/lots/${declared.id}/customs-status`, { status: 'RELEASED' });
+  assert.equal((await as(A('cfs'), 'POST', `/cfs/lots/${declared.id}/deliver`, { packages: declared.packages_received + 1, truckPlate: 'AL5LCL' })).status, 400);
+  const part = (await as(A('cfs'), 'POST', `/cfs/lots/${declared.id}/deliver`, { packages: 10, truckPlate: 'AL5LCL' })).body;
+  assert.equal(part.status, 'PARTLY_DELIVERED');
+  const rest = (await as(A('cfs'), 'POST', `/cfs/lots/${declared.id}/deliver`, { packages: declared.packages_received - 10, truckPlate: 'AL6LCL' })).body;
+  assert.equal(rest.status, 'DELIVERED');
+
+  const exp = (await as(A('forwarder'), 'GET', `/cfs/lots?facilityId=${cfs.id}&direction=EXPORT&status=IN_STORE`)).body.find((l: any) => l.customs_status === 'RELEASED');
+  const me = (await as(A('line'), 'GET', '/auth/me')).body.user;
+  const line = me.orgId ?? me.org_id;
+  const box = cntr('ALPU', '900001');
+  const job = await as(A('forwarder'), 'POST', '/cfs/jobs', { facilityId: cfs.id, type: 'STUFF', containerNo: box, lineOrgId: line, lotIds: [exp.id] });
+  assert.equal(job.status, 200, JSON.stringify(job.body));
+  await as(A('cfs'), 'POST', `/cfs/jobs/${job.body.id}/start`);
+  assert.equal((await as(A('cfs'), 'POST', `/cfs/jobs/${job.body.id}/complete`, {})).status, 400, 'seal required');
+  assert.equal((await as(A('cfs'), 'POST', `/cfs/jobs/${job.body.id}/complete`, { sealNo: 'SL777' })).body.status, 'COMPLETED');
+
+  const terms = (await as(A('portadmin'), 'GET', '/ref/terminals')).body;
+  const t = (await as(A('forwarder'), 'POST', '/inland-transfers', { direction: 'TO_PORT', facilityId: cfs.id, terminalId: terms.find((x: any) => x.code === 'CT1').id, containers: [box], mode: 'TRUCK' })).body;
+  const ap = (await as(A('customs'), 'GET', `/approvals?entityId=${t.id}`)).body[0];
+  await as(A('customs'), 'POST', `/approvals/${ap.id}/decision`, { status: 'APPROVED' });
+  assert.equal((await as(A('cfs'), 'POST', `/inland-transfers/${t.id}/dispatch`)).status, 200);
+  assert.equal((await as(A('terminal'), 'POST', `/inland-transfers/${t.id}/arrive`)).status, 200);
+  const track = (await as(A('forwarder'), 'GET', `/containers/track/${box}`));
+  if (track.status === 200) assert.equal(track.body.status ?? track.body.container?.status, 'GATED_IN');
+});

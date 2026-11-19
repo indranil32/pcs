@@ -28,7 +28,7 @@ export type ApprovalStatus = (typeof APPROVAL_STATUS)[number];
 export const CUSTOMS_STATUS = ['NOT_DECLARED', 'DECLARED', 'UNDER_INSPECTION', 'RELEASED', 'HELD'] as const;
 export type CustomsStatus = (typeof CUSTOMS_STATUS)[number];
 
-export const CONTAINER_STATUS = ['ON_VESSEL', 'DISCHARGED', 'IN_YARD', 'GATED_OUT', 'GATED_IN', 'LOADED', 'ON_RAIL', 'ON_BARGE'] as const;
+export const CONTAINER_STATUS = ['ON_VESSEL', 'DISCHARGED', 'IN_YARD', 'GATED_OUT', 'GATED_IN', 'LOADED', 'ON_RAIL', 'ON_BARGE', 'IN_TRANSIT', 'AT_FACILITY', 'DELIVERED'] as const;
 export type ContainerStatus = (typeof CONTAINER_STATUS)[number];
 
 export const DO_STATUS = ['REQUESTED', 'ISSUED', 'REJECTED', 'REVOKED', 'USED'] as const;
@@ -93,3 +93,37 @@ export type OrgStatus = (typeof ORG_STATUS)[number];
 export function canTransition<S extends string>(flow: Transitions<S>, from: S, to: S): boolean {
   return (flow[from] ?? []).includes(to);
 }
+
+// ---------- Inland facilities: dry ports (ICD), empty depots, CFS ----------
+export const FACILITY_TYPES = ['DRY_PORT', 'EMPTY_DEPOT', 'CFS'] as const;
+export type FacilityType = (typeof FACILITY_TYPES)[number];
+
+export const TRANSFER_STATUS = ['REQUESTED', 'CUSTOMS_APPROVED', 'REJECTED', 'IN_TRANSIT', 'ARRIVED', 'CANCELLED'] as const;
+export type TransferStatus = (typeof TRANSFER_STATUS)[number];
+export const TRANSFER_FLOW: Transitions<TransferStatus> = {
+  REQUESTED: ['CUSTOMS_APPROVED', 'REJECTED', 'CANCELLED'],
+  CUSTOMS_APPROVED: ['IN_TRANSIT', 'CANCELLED'],
+  IN_TRANSIT: ['ARRIVED'],
+  REJECTED: [],
+  ARRIVED: [],
+  CANCELLED: [],
+};
+
+export const CFS_JOB_STATUS = ['REQUESTED', 'SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const;
+export type CfsJobStatus = (typeof CFS_JOB_STATUS)[number];
+export const CFS_JOB_FLOW: Transitions<CfsJobStatus> = {
+  REQUESTED: ['SCHEDULED', 'IN_PROGRESS', 'CANCELLED'],
+  SCHEDULED: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['COMPLETED'],
+  COMPLETED: [],
+  CANCELLED: [],
+};
+
+export const REPAIR_STATUS = ['ESTIMATED', 'APPROVED', 'REJECTED', 'COMPLETED'] as const;
+export type RepairStatus = (typeof REPAIR_STATUS)[number];
+
+/** IICL-style damage codes used in the depot condition survey. */
+export const DAMAGE_CODES: Record<string, string> = {
+  BT: 'Bent', BR: 'Broken', CU: 'Cut', DT: 'Dent', HO: 'Hole', MS: 'Missing', CO: 'Corroded', DY: 'Dirty', WT: 'Wet / leaking', LO: 'Loose',
+};
+export const CONTAINER_COMPONENTS = ['Front panel', 'Door', 'Left side panel', 'Right side panel', 'Roof', 'Floor', 'Corner post', 'Corner casting', 'Cross member', 'Rail', 'Locking gear'];

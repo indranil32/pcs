@@ -18,12 +18,16 @@ export default async function common(app: FastifyInstance) {
       many(
         c,
         `SELECT ap.*, u.name AS decided_by_name,
-           vc.call_no, v.name AS vessel_name, v.imo, vc.eta, vc.etd, o.name AS agent_name
+           vc.call_no, v.name AS vessel_name, v.imo, vc.eta, vc.etd, o.name AS agent_name,
+           it.transfer_no, it.direction AS transfer_direction, it.containers AS transfer_containers, it.mode AS transfer_mode, f.name AS facility_name, ro.name AS requester_name
          FROM approvals ap
          LEFT JOIN users u ON u.id=ap.decided_by
          LEFT JOIN vessel_calls vc ON ap.entity_type='vessel_call' AND vc.id=ap.entity_id
          LEFT JOIN vessels v ON v.id=vc.vessel_id
          LEFT JOIN organisations o ON o.id=vc.agent_org_id
+         LEFT JOIN inland_transfers it ON ap.entity_type='inland_transfer' AND it.id=ap.entity_id
+         LEFT JOIN facilities f ON f.id=it.facility_id
+         LEFT JOIN organisations ro ON ro.id=it.requester_org_id
          WHERE ($1 OR ap.agency = ANY($2)) AND ($3::text IS NULL OR ap.status=$3)
            AND ($4::text IS NULL OR ap.entity_type=$4) AND ($5::uuid IS NULL OR ap.entity_id=$5)
          ORDER BY ap.status='PENDING' DESC, ap.created_at DESC LIMIT 300`,
