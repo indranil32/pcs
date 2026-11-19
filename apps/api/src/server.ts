@@ -13,7 +13,11 @@ import { config } from './core/config.js';
 import { authenticate, sendError } from './core/context.js';
 import { modules } from './modules/index.js';
 
-export async function buildApp(opts: { logger?: boolean } = {}) {
+/** Startup state of the process-level server (main.ts). Servers built without `gated` (seed, tests) ignore it. */
+export const lifecycle = { ready: true };
+
+export async function buildApp(opts: { logger?: boolean; gated?: boolean } = {}) {
+  const gated = !!opts.gated;
   const app = Fastify({
     logger: opts.logger === false ? false : { level: config.logLevel },
     bodyLimit: 10 * 1024 * 1024,
@@ -51,7 +55,12 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
     await authenticate(req);
   });
 
-  app.get('/health', { config: { public: true } }, async () => ({ status: 'ok', service: 'pcs-api', time: new Date().toISOString() }));
+  app.get('/health', { config: { public: true } }, async () => ({ status: !gated || lifecycle.ready ? 'ok' : 'starting', service: 'pcs-api', time: new Date().toISOString() }));
+  app.get('/ready', { config: { public: true } }, async (_req, reply) => reply.status(!gated || lifecycle.ready ? 200 : 503).send({ ready: !gated || lifecycle.ready }));
+  // Block API traffic until migrations/seed have finished
+  app.addHook('onRequest', async (req, reply) => {
+    if (gated && !lifecycle.ready && req.url.startsWith('/api/') && !req.url.startsWith('/api/docs')) return reply.status(503).send({ error: 'Starting up' });
+  });
 
   for (const m of modules) await app.register(m, { prefix: '/api' });
 
