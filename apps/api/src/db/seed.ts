@@ -1,6 +1,8 @@
 // Demo seed: reference data via SQL, then live scenarios driven through the real API (so seeding exercises every flow).
 import path from 'node:path';
 import bcrypt from 'bcryptjs';
+import pg from 'pg';
+import { config } from '../core/config.js';
 import { withTenant, one, insert } from '../core/db.js';
 import { PORTS, VESSELS, LOCATIONS, cntr } from './seed-data.js';
 
@@ -15,8 +17,19 @@ const ROLE_LOGIN: Record<string, string> = {
 
 export async function seed(opts: { force?: boolean; log?: (m: string) => void } = {}) {
   const log = opts.log ?? console.log;
-  const existing = await withTenant('*', (c) => one(c, 'SELECT count(*)::int AS n FROM tenants'));
-  if (existing!.n > 0 && !opts.force) { log('seed: data present, skipping'); return; }
+  const existing = await withTenant('*', (c) => one(c, 'SELECT (SELECT count(*)::int FROM tenants) AS n, (SELECT count(*)::int FROM seed_state) AS done'));
+  if (existing!.n > 0 && existing!.done > 0 && !opts.force) { log('seed: data present, skipping'); return; }
+  if (existing!.n > 0) {
+    // Data present but no completion marker: a previous seed was interrupted (or --force). Start clean.
+    log('seed: incomplete or forced — clearing demo data and reseeding');
+    const admin = new pg.Client({ connectionString: config.adminDatabaseUrl });
+    await admin.connect();
+    try {
+      await admin.query('TRUNCATE tenants, users, vessels, locations, audit_log, seed_state RESTART IDENTITY CASCADE');
+    } finally {
+      await admin.end();
+    }
+  }
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const ids: any = {};
 
@@ -232,6 +245,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
     log(`seed: ${p.code} scenarios complete`);
   }
   await app.close();
+  await withTenant('*', (c) => c.query('INSERT INTO seed_state (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET completed_at = now()'));
   log(process.env.DEMO_PASSWORD ? "seed: done — demo users use the DEMO_PASSWORD secret" : `seed: done — demo password "${DEMO_PASSWORD}"`);
 }
 
