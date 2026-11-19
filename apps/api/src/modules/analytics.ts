@@ -2,7 +2,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool, one, many, withTenant } from '../core/db.js';
-import { tx, notFound } from '../core/context.js';
+import { tx, notFound, requireRole } from '../core/context.js';
 
 const range = z.object({ from: z.coerce.date().default(() => new Date(Date.now() - 30 * 864e5)), to: z.coerce.date().default(() => new Date()) });
 
@@ -81,6 +81,34 @@ export default async function analytics(app: FastifyInstance) {
     return { valid: r.status !== 'CANCELLED', port: t.name, permitNo: r.entry_permit_no, grantedAt: r.entry_permit_at, vessel: r.vessel, imo: r.imo, callStatus: r.status, eta: r.eta, etd: r.etd };
   });
 
+  // FR-GIS: AIS ingestion from an external feed (VTS, AIS receiver network or provider). Batch of latest positions.
+  app.post('/ais/positions', async (req) => {
+    requireRole(req.actor, 'HARBOUR_MASTER', 'MARITIME_SAFETY');
+    const b = z.object({
+      source: z.string().min(2).max(30).default('VTS'),
+      positions: z.array(z.object({
+        mmsi: z.string().regex(/^\d{9}$/), imo: z.string().regex(/^\d{7}$/).optional().nullable(),
+        lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180),
+        sog: z.number().min(0).max(102.3).optional().nullable(), cog: z.number().min(0).max(360).optional().nullable(),
+        navStatus: z.string().max(30).optional().nullable(), at: z.coerce.date(),
+      })).max(5000),
+    }).parse(req.body);
+    return tx(req, async (c) => {
+      let n = 0;
+      for (const p of b.positions) {
+        const v = await one(c, 'SELECT id FROM vessels WHERE mmsi=$1 OR ($2::text IS NOT NULL AND imo=$2) LIMIT 1', [p.mmsi, p.imo ?? null]);
+        await c.query(`INSERT INTO ais_positions (tenant_id, mmsi, vessel_id, lat, lon, sog, cog, nav_status, at, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          ON CONFLICT (tenant_id, mmsi) DO UPDATE SET vessel_id=coalesce(EXCLUDED.vessel_id, ais_positions.vessel_id), lat=EXCLUDED.lat, lon=EXCLUDED.lon, sog=EXCLUDED.sog,
+            cog=EXCLUDED.cog, nav_status=EXCLUDED.nav_status, at=EXCLUDED.at, source=EXCLUDED.source WHERE ais_positions.at <= EXCLUDED.at`,
+          [req.actor.tenantId, p.mmsi, v?.id ?? null, p.lat, p.lon, p.sog ?? null, p.cog ?? null, p.navStatus ?? null, p.at, b.source]);
+        n++;
+      }
+      // Remove stale targets from the same feed (left the area)
+      await c.query(`DELETE FROM ais_positions WHERE tenant_id=$1 AND source=$2 AND at < now() - interval '15 minutes'`, [req.actor.tenantId, b.source]);
+      return { accepted: n };
+    });
+  });
+
   // FR-GIS: map layers
   app.get('/gis/map', async (req) => tx(req, async (c) => ({
     port: await one(c, 'SELECT code, name, lat, lon FROM tenants WHERE id=$1', [req.actor.tenantId]),
@@ -88,7 +116,7 @@ export default async function analytics(app: FastifyInstance) {
     berths: await many(c, `SELECT b.id, b.code, b.name, b.lat, b.lon, b.length_m, b.depth_m, b.barge_berth,
         (SELECT json_build_object('callNo', vc.call_no, 'vessel', v.name, 'status', vc.status) FROM vessel_calls vc JOIN vessels v ON v.id=vc.vessel_id WHERE vc.berth_id=b.id AND vc.status IN ('BERTHED','DEPARTURE_REQUESTED','DEPARTURE_CLEARED') LIMIT 1) AS occupant
       FROM berths b WHERE b.lat IS NOT NULL`),
-    vessels: await many(c, `SELECT a.mmsi, a.lat, a.lon, a.sog, a.cog, a.nav_status, a.at, v.name, v.imo, v.type,
+    vessels: await many(c, `SELECT a.mmsi, a.lat, a.lon, a.sog, a.cog, a.nav_status, a.at, a.source, coalesce(v.name, 'MMSI ' || a.mmsi) AS name, v.imo, v.type,
         (SELECT json_build_object('id', vc.id, 'callNo', vc.call_no, 'status', vc.status, 'eta', vc.eta) FROM vessel_calls vc WHERE vc.vessel_id=v.id AND vc.status NOT IN ('DEPARTED','CANCELLED','DRAFT') ORDER BY vc.eta LIMIT 1) AS call
       FROM ais_positions a LEFT JOIN vessels v ON v.id=a.vessel_id`),
   })));

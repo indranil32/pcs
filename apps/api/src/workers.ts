@@ -31,7 +31,8 @@ export async function simulateAis() {
   await withTenant('*', async (c) => {
     const calls = await many(c, `SELECT vc.tenant_id, vc.status, v.id AS vessel_id, coalesce(v.mmsi, '9'||right(v.imo,7)||'0') AS mmsi, b.lat AS blat, b.lon AS blon, t.lat AS plat, t.lon AS plon
       FROM vessel_calls vc JOIN vessels v ON v.id=vc.vessel_id JOIN tenants t ON t.id=vc.tenant_id LEFT JOIN berths b ON b.id=vc.berth_id
-      WHERE vc.status IN ('BERTH_ALLOCATED','PRE_ARRIVAL_SUBMITTED','ARRIVAL_CLEARED','ARRIVED','BERTHED','DEPARTURE_REQUESTED','DEPARTURE_CLEARED') AND t.lat IS NOT NULL`);
+      WHERE vc.status IN ('BERTH_ALLOCATED','PRE_ARRIVAL_SUBMITTED','ARRIVAL_CLEARED','ARRIVED','BERTHED','DEPARTURE_REQUESTED','DEPARTURE_CLEARED') AND t.lat IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM ais_positions x WHERE x.tenant_id = vc.tenant_id AND x.source <> 'SIM' AND x.at > now() - interval '10 minutes')`);
     for (const x of calls) {
       const atBerth = ['BERTHED', 'DEPARTURE_REQUESTED', 'DEPARTURE_CLEARED'].includes(x.status) && x.blat;
       const seed = parseInt(x.mmsi.slice(-4), 10) || 1;
@@ -40,10 +41,12 @@ export async function simulateAis() {
       const lat = atBerth ? x.blat : x.plat + Math.sin(ang) * dist;
       const lon = atBerth ? x.blon : x.plon + 0.06 + Math.abs(Math.cos(ang)) * dist;
       await c.query(`INSERT INTO ais_positions (tenant_id, mmsi, vessel_id, lat, lon, sog, cog, nav_status, at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
-        ON CONFLICT (tenant_id, mmsi) DO UPDATE SET lat=EXCLUDED.lat, lon=EXCLUDED.lon, sog=EXCLUDED.sog, cog=EXCLUDED.cog, nav_status=EXCLUDED.nav_status, at=now()`,
+        ON CONFLICT (tenant_id, mmsi) DO UPDATE SET lat=EXCLUDED.lat, lon=EXCLUDED.lon, sog=EXCLUDED.sog, cog=EXCLUDED.cog, nav_status=EXCLUDED.nav_status, at=now(), source='SIM'
+        WHERE ais_positions.source = 'SIM' OR ais_positions.at < now() - interval '10 minutes'`,
         [x.tenant_id, x.mmsi, x.vessel_id, lat, lon, atBerth ? 0 : x.status === 'ARRIVED' ? 3.5 : 0.2, (seed * 7) % 360, atBerth ? 'MOORED' : x.status === 'ARRIVED' ? 'UNDER_WAY' : 'AT_ANCHOR']);
     }
-    await c.query(`DELETE FROM ais_positions a WHERE NOT EXISTS (SELECT 1 FROM vessel_calls vc WHERE vc.vessel_id=a.vessel_id AND vc.status IN ('BERTH_ALLOCATED','PRE_ARRIVAL_SUBMITTED','ARRIVAL_CLEARED','ARRIVED','BERTHED','DEPARTURE_REQUESTED','DEPARTURE_CLEARED'))`);
+    // Skip ports that receive a live external AIS feed (e.g. from a VTS)
+    await c.query(`DELETE FROM ais_positions a WHERE a.source = 'SIM' AND NOT EXISTS (SELECT 1 FROM vessel_calls vc WHERE vc.vessel_id=a.vessel_id AND vc.status IN ('BERTH_ALLOCATED','PRE_ARRIVAL_SUBMITTED','ARRIVAL_CLEARED','ARRIVED','BERTHED','DEPARTURE_REQUESTED','DEPARTURE_CLEARED'))`);
   });
 }
 

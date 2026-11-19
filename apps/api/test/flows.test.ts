@@ -154,3 +154,19 @@ test('organisation self-registration needs port admin approval before sign-in', 
   const ok = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email, password: 'Password123!' } });
   assert.equal(ok.statusCode, 200);
 });
+
+test('external AIS feed (VTS) replaces simulated positions on the port map', async () => {
+  const at = new Date().toISOString();
+  assert.equal((await as('agent@zzalp.demo', 'POST', '/ais/positions', { positions: [] })).status, 403);
+  const r = await as('harbour@zzalp.demo', 'POST', '/ais/positions', { source: 'VTS', positions: [{ mmsi: '999112000', lat: 0.015, lon: 0.1, sog: 9.5, cog: 270, at }, { mmsi: '999000777', lat: 0.02, lon: 0.2, sog: 12, cog: 0, at }] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.accepted, 2);
+  const map = await as('harbour@zzalp.demo', 'GET', '/gis/map');
+  const known = map.body.vessels.find((v: any) => v.mmsi === '999112000');
+  assert.equal(known.source, 'VTS');
+  assert.equal(known.name, 'OCEAN PIONEER');
+  assert.equal(map.body.vessels.find((v: any) => v.mmsi === '999000777').name, 'MMSI 999000777');
+  // the other port never sees this feed
+  const beta = await as('harbour@zzbet.demo', 'GET', '/gis/map');
+  assert.ok(!beta.body.vessels.some((v: any) => v.mmsi === '999000777'));
+});
