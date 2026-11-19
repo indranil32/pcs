@@ -93,17 +93,21 @@ tests → security scans (npm audit, gitleaks, Trivy, Bicep build) → image bui
 GHCR → **Bicep deployment** (infrastructure and new image in one step) → health wait → smoke tests against Azure →
 automatic rollback on failure.
 
+PCS shares the ESG app's **Container Apps environment** and **PostgreSQL server**. It gets its own `pcs` database
+with roles `pcs_owner` (migrations) and `pcs_app` (runtime, row-level security), so ESG data is not touched and
+PCS never stores ESG's admin password. The deploy job creates the database and roles idempotently, using ESG's
+connection read from Azure and a temporary firewall rule for the runner. No GitHub secrets are needed: PCS
+passwords are generated on the first deploy and kept only in the PCS container app's secrets.
+
 One-time setup:
 
-1. In Azure Cloud Shell, run `infra/github-oidc-setup.sh rg-pcs-dev centralindia indranil32/pcs`. It creates the
-   resource group and a federated identity for GitHub (no stored Azure secret), then prints the values for the
-   next step. If it finds the ESG app's Container Apps environment, it offers to reuse it, since trial
-   subscriptions allow only one environment.
-2. In GitHub, go to **Settings → Environments → `azure-dev`** and add:
-   - variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, and optionally `PCS_EXISTING_ENV_ID`
-   - secrets `PCS_DB_ADMIN_PASSWORD`, `PCS_APP_DB_PASSWORD`, `PCS_JWT_SECRET`, `PCS_DEMO_PASSWORD`
-3. After the first successful build, make the GHCR package `ghcr.io/indranil32/pcs` **public** (Package settings →
-   Change visibility), or Container Apps cannot pull it. Then re-run the workflow, or push to `main`.
+1. In Azure Cloud Shell, run `bash infra/github-oidc-setup.sh`. It creates `rg-pcs-dev` and a federated identity
+   with Contributor on the PCS and ESG resource groups, then prints five variables.
+2. In GitHub, go to **Settings → Environments → `azure-dev` → Variables** and add `AZURE_CLIENT_ID`,
+   `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `ESG_RESOURCE_GROUP`. Optionally add a
+   secret `PCS_DEMO_PASSWORD`; otherwise one is generated. Read it with
+   `az containerapp secret show -g rg-pcs-dev -n <app> --secret-name demo-password`.
+3. Make the GHCR package `ghcr.io/indranil32/pcs` **public**, as for port-esg, then re-run the workflow.
 
 Until the variables exist, the deploy job skips with a warning, so CI still passes. `infra/prod.bicepparam` holds
 production settings (UAE North, General Purpose PostgreSQL, no demo seed, no AIS simulator).

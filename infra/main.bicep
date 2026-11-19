@@ -22,8 +22,14 @@ param image string = 'mcr.microsoft.com/k8se/quickstart:latest'
 @description('Reuse an existing Container Apps environment (resource ID). Trial subscriptions allow only one environment per region — pass the ESG environment here to share it. Blank creates a new one.')
 param existingEnvironmentId string = ''
 
+@description('Use an existing PostgreSQL flexible server (FQDN), e.g. the ESG server. Blank creates a dedicated server. The pcs database and roles must exist (the CI/CD workflow creates them).')
+param existingPostgresHost string = ''
+
+@description('Role that owns the pcs database and runs migrations.')
+param dbAdminUser string = 'pcsadmin'
+
 @secure()
-@description('PostgreSQL administrator password (schema owner, runs migrations).')
+@description('Password of dbAdminUser.')
 param dbAdminPassword string
 
 @secure()
@@ -52,6 +58,7 @@ param corsOrigin string = ''
 
 var uniq = uniqueString(resourceGroup().id)
 var createEnv = empty(existingEnvironmentId)
+var createPg = empty(existingPostgresHost)
 
 // ---------------------------------------------------------------- monitoring
 resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (createEnv) {
@@ -61,25 +68,25 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (create
 }
 
 // ---------------------------------------------------------------- database
-resource pg 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
+resource pg 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = if (createPg) {
   name: 'psql-${prefix}-${uniq}-${dbLocation}'
   location: dbLocation
   sku: { name: dbSku, tier: dbTier }
   properties: {
     version: '16'
-    administratorLogin: 'pcsadmin'
+    administratorLogin: dbAdminUser
     administratorLoginPassword: dbAdminPassword
     storage: { storageSizeGB: 32 }
     backup: { backupRetentionDays: 14, geoRedundantBackup: 'Disabled' }
     highAvailability: { mode: 'Disabled' }
   }
 }
-resource pgDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
+resource pgDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = if (createPg) {
   parent: pg
   name: 'pcs'
 }
 // Lets Azure-hosted services (the container app) connect. Use VNet integration + private endpoint for production.
-resource pgAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = {
+resource pgAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = if (createPg) {
   parent: pg
   name: 'AllowAzureServices'
   properties: { startIpAddress: '0.0.0.0', endIpAddress: '0.0.0.0' }
@@ -100,8 +107,8 @@ resource env 'Microsoft.App/managedEnvironments@2024-03-01' = if (createEnv) {
   }
 }
 
-var host = pg.properties.fullyQualifiedDomainName
-var adminUrl = 'postgresql://pcsadmin:${uriComponent(dbAdminPassword)}@${host}:5432/pcs?sslmode=require'
+var host = createPg ? pg!.properties.fullyQualifiedDomainName : existingPostgresHost
+var adminUrl = 'postgresql://${dbAdminUser}:${uriComponent(dbAdminPassword)}@${host}:5432/pcs?sslmode=require'
 var appUrl = 'postgresql://pcs_app:${uriComponent(appDbPassword)}@${host}:5432/pcs?sslmode=require'
 
 resource app 'Microsoft.App/containerApps@2024-03-01' = {
@@ -116,6 +123,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'admin-database-url', value: adminUrl }
         { name: 'database-url', value: appUrl }
         { name: 'app-db-password', value: appDbPassword }
+        { name: 'db-admin-password', value: dbAdminPassword }
         { name: 'jwt-secret', value: jwtSecret }
       ], demoPassword != '' ? [
         { name: 'demo-password', value: demoPassword }
