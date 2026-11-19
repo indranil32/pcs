@@ -1,5 +1,5 @@
 // FR-CGO / FR-CON / FR-CUS: manifests, bills of lading, containers, customs status exchange, holds, tracking
-// System boundary: PCS carries the customs *status* (from NICIS II / national customs via adapter or customs users);
+// System boundary: PCS carries the customs *status* (from the national customs system via adapter, or from customs users);
 // declaration assessment stays in the Customs Management System. Yard planning stays in the TOS.
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';

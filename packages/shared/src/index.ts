@@ -1,4 +1,4 @@
-// Shared domain model for the Maqta PCS — imported by the API and the web portal.
+// Shared domain model for the PCS — imported by the API and the web portal.
 // Module codes follow PCS PRD v2.1 (FR-PLT, FR-VES, FR-CGO, FR-CUS, FR-GAT, FR-TRS, FR-FIN, FR-SWN, ...).
 
 export * from './state.js';
@@ -14,7 +14,7 @@ export const ROLES = [
   'IMMIGRATION',
   'BORDER_POLICE',
   'PORT_HEALTH',
-  'MARITIME_SAFETY',    // e.g. NIMASA (NG), ANR (RO)
+  'MARITIME_SAFETY',    // maritime safety / flag-state administration
   'TERMINAL_OPERATOR',
   'FREIGHT_FORWARDER',  // CHA / customs broker / forwarder
   'HAULIER',
@@ -82,7 +82,7 @@ export type Lang = (typeof LANGUAGES)[number];
 export interface TenantSettings {
   clearanceAgencies: Agency[];
   falFormsRequired: number[];
-  customsSystem: 'MOCK' | 'NICIS_II' | 'RO_CUSTOMS';
+  customsSystem: 'MOCK' | 'REST_API' | 'EDIFACT';
   languages: Lang[];
   vatRate: number;
   truckSlotMinutes: number;

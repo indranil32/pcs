@@ -34,7 +34,7 @@ export function isValidImo(raw: string | number): boolean {
   return sum % 10 === Number(s[6]);
 }
 
-/** UN/LOCODE, e.g. ROCND, NGAPP. */
+/** UN/LOCODE, e.g. NLRTM, SGSIN (ZZ = user-assigned, used for demo ports). */
 export function isValidUnlocode(s: string): boolean {
   return /^[A-Z]{2}[A-Z2-9]{3}$/.test(s);
 }

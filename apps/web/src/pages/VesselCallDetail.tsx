@@ -288,7 +288,7 @@ function FalEditor({ no, c, existing, readOnly, onClose, inv }: { no: number; c:
 // ---------------- Cargo ----------------
 function CargoTab({ c, owner, inv }: { c: any; owner: boolean; inv: any[] }) {
   const [open, setOpen] = useState(false);
-  const [csv, setCsv] = useState('BL no,Consignee,Description,HS code,Packages,Gross kg,Container,ISO type,Seal\nEUXBL900001,Danubius Retail SRL (demo),Furniture,940360,120,15400,EUXU9000012,45G1,SL1001\n');
+  const [csv, setCsv] = useState('BL no,Consignee,Description,HS code,Packages,Gross kg,Container,ISO type,Seal\nALPBL900001,City Retail (demo),Furniture,940360,120,15400,ALPU9000019,45G1,SL1001\n');
   const [direction, setDirection] = useState('IMPORT');
   const forwarders = useQuery({ queryKey: ['dir', 'FREIGHT_FORWARDER'], queryFn: () => api<any[]>('/directory/organisations?type=FREIGHT_FORWARDER'), enabled: open });
   const [fwd, setFwd] = useState('');

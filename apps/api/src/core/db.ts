@@ -53,7 +53,7 @@ export async function update<T = any>(c: Db, table: string, id: string, patch: R
   return r.rows[0] as T;
 }
 
-/** Next human-readable document number, e.g. ROCND-VC-2026-000042. */
+/** Next human-readable document number, e.g. ZZALP-VC-2026-000042. */
 export async function nextNo(c: Db, tenantId: string, tenantCode: string, prefix: string): Promise<string> {
   const year = new Date().getUTCFullYear();
   const name = `${prefix}-${year}`;

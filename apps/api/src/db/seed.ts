@@ -6,6 +6,7 @@ import { config } from '../core/config.js';
 import { withTenant, one, insert } from '../core/db.js';
 import { PORTS, VESSELS, LOCATIONS, cntr } from './seed-data.js';
 
+export const SEED_VERSION = '2-generic';
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'PcsDemo!2026';
 const H = 36e5, D = 864e5;
 
@@ -17,10 +18,10 @@ const ROLE_LOGIN: Record<string, string> = {
 
 export async function seed(opts: { force?: boolean; log?: (m: string) => void } = {}) {
   const log = opts.log ?? console.log;
-  const existing = await withTenant('*', (c) => one(c, 'SELECT (SELECT count(*)::int FROM tenants) AS n, (SELECT count(*)::int FROM seed_state) AS done'));
+  const existing = await withTenant('*', (c) => one(c, 'SELECT (SELECT count(*)::int FROM tenants) AS n, (SELECT count(*)::int FROM seed_state WHERE version = $1) AS done', [SEED_VERSION]));
   if (existing!.n > 0 && existing!.done > 0 && !opts.force) { log('seed: data present, skipping'); return; }
   if (existing!.n > 0) {
-    // Data present but no completion marker: a previous seed was interrupted (or --force). Start clean.
+    // Data present but no completion marker for this dataset version: interrupted, outdated or forced. Start clean.
     log('seed: incomplete or forced — clearing demo data and reseeding');
     const admin = new pg.Client({ connectionString: config.adminDatabaseUrl });
     await admin.connect();
@@ -45,7 +46,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
       const dom = `${p.code.toLowerCase()}.demo`;
       const addUser = (orgId: string, roles: string[], login: string, name: string) =>
         c.query('INSERT INTO users (tenant_id, org_id, email, name, password_hash, roles, lang) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-          [t.id, orgId, `${login}@${dom}`, name, hash, roles, p.code === 'ROCND' && login !== 'agent' ? 'en' : 'en']);
+          [t.id, orgId, `${login}@${dom}`, name, hash, roles, 'en']);
       for (const [name, type, roles] of p.authorities) {
         const o = await insert(c, 'organisations', { tenant_id: t.id, name, type, email: `info@${dom}`, status: 'ACTIVE', registration_no: 'GOV' });
         for (const r of roles) { await addUser(o.id, [r], ROLE_LOGIN[r], `${r.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (x) => x.toUpperCase())} (${p.code})`); pid.orgs[r] = o.id; }
@@ -75,7 +76,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
         pid.orgs[login === 'bunkers' ? 'BUNKERS' : role] = o.id;
       }
       for (const [code, name, applies, basis, rate, min] of p.tariffs) await insert(c, 'tariffs', { tenant_id: t.id, code, name, applies_to: applies, basis, rate, min_amount: min, currency: p.currency });
-      const cur = p.currency, k = p.code === 'NGAPP' ? 180 : 1;
+      const cur = p.currency, k = p.currency === 'USD' ? 0.25 : 0.22;
       const offers: [string, string, string, number][] = [
         [pid.orgs.SERVICE_PROVIDER, 'PILOTAGE', 'JOB', 1800 * k], [pid.orgs.SERVICE_PROVIDER, 'TOWAGE', 'TUG_HOUR', 1400 * k], [pid.orgs.SERVICE_PROVIDER, 'MOORING', 'JOB', 600 * k],
         [pid.orgs.BUNKERS, 'BUNKERING', 'TONNE', 3100 * k], [pid.orgs.BUNKERS, 'FRESH_WATER', 'TONNE', 25 * k], [pid.orgs.SERVICE_PROVIDER, 'WASTE_COLLECTION', 'M3', 220 * k],
@@ -107,27 +108,27 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
       if (r.statusCode >= 400) throw new Error(`${who} ${method} ${url} → ${r.statusCode} ${r.body}`);
       return r.json();
     };
-    const vessels = p.code === 'ROCND' ? VESSELS.slice(0, 4).concat(VESSELS[6]) : VESSELS.slice(3, 8);
+    const vessels = p === PORTS[0] ? VESSELS.slice(0, 4).concat(VESSELS[6]) : VESSELS.slice(3, 8);
     const berthsFor = Object.entries(pid.berths).filter(([code]) => !code.startsWith('B') || code.startsWith('B3') || code === 'B80').filter(([code]) => !code.startsWith('BG') && !code.startsWith('J')) as [string, string][];
     const vid = async (imo: string) => (await withTenant('*', (c) => one(c, 'SELECT id FROM vessels WHERE imo=$1', [imo])))!.id;
     const fal = async (id: string, v: any, dg: boolean) => {
       await call('agent', 'PUT', `/vessel-calls/${id}/fal/1`, { masterName: 'Capt. A. Demo', portOfArrival: p.code, lastPortOfCall: p.lastPorts[0], briefCargoDescription: 'Containers / general cargo', nationalityOfShip: v.flag, grossTonnage: v.gt });
       await call('agent', 'PUT', `/vessel-calls/${id}/fal/2`, { items: [{ blNo: 'SEE-MANIFEST', description: 'As per CUSCAR manifest', packages: 1 }] });
       await call('agent', 'PUT', `/vessel-calls/${id}/fal/3`, { stores: [{ article: 'Provisions', quantity: '2 t' }, { article: 'Lubricating oil', quantity: '8 m3' }] });
-      await call('agent', 'PUT', `/vessel-calls/${id}/fal/5`, { crew: Array.from({ length: 18 }, (_, i) => ({ familyName: `Crew${i + 1}`, givenNames: 'Demo', rank: i === 0 ? 'Master' : i < 4 ? 'Officer' : 'Rating', nationality: ['PH', 'UA', 'RO', 'IN'][i % 4], idDocNo: `SB${100000 + i}` })) });
-      if (dg) await call('agent', 'PUT', `/vessel-calls/${id}/fal/7`, { items: [{ unNumber: 'UN1203', properShippingName: 'GASOLINE', class: '3', quantity: '20 t', containerNo: cntr('EUXU', '700001') }] });
+      await call('agent', 'PUT', `/vessel-calls/${id}/fal/5`, { crew: Array.from({ length: 18 }, (_, i) => ({ familyName: `Crew${i + 1}`, givenNames: 'Demo', rank: i === 0 ? 'Master' : i < 4 ? 'Officer' : 'Rating', nationality: ['ZZ', 'ZZ', 'ZZ', 'ZZ'][i % 4], idDocNo: `SB${100000 + i}` })) });
+      if (dg) await call('agent', 'PUT', `/vessel-calls/${id}/fal/7`, { items: [{ unNumber: 'UN1203', properShippingName: 'GASOLINE', class: '3', quantity: '20 t', containerNo: cntr(p.owner, '700001') }] });
     };
     const clearAll = async (id: string, stage: string) => {
       const aps = await call('portadmin', 'GET', `/approvals?entityId=${id}`);
       for (const ap of aps.filter((x: any) => x.stage === stage && x.status === 'PENDING')) await call(ROLE_LOGIN[ap.agency], 'POST', `/approvals/${ap.id}/decision`, { status: 'APPROVED' });
     };
-    const owner = p.code === 'ROCND' ? 'EUXU' : 'GGLU';
+    const owner = p.owner;
     let serial = 100000;
     const manifest = (nBl: number) => ({
       direction: 'IMPORT',
       bls: Array.from({ length: nBl }, (_, i) => ({
-        blNo: `${owner}${p.code.slice(2)}${String(serial + i * 7).slice(-6)}`, shipper: ['Anatolia Textiles (demo)', 'Shanghai Machinery Co (demo)', 'Hamburg Chemicals (demo)'][i % 3],
-        consignee: ['Danubius Retail SRL (demo)', 'Agro Import SA (demo)', 'Eko Distribution Ltd (demo)'][i % 3], forwarderOrgId: pid.orgs.FREIGHT_FORWARDER,
+        blNo: `${owner}${p.code.slice(2)}${String(serial + i * 7).slice(-6)}`, shipper: ['Textile Exporters (demo)', 'Machinery Works (demo)', 'Chemicals Trading (demo)'][i % 3],
+        consignee: ['City Retail (demo)', 'Agri Imports (demo)', 'National Distribution (demo)'][i % 3], forwarderOrgId: pid.orgs.FREIGHT_FORWARDER,
         pol: p.lastPorts[i % p.lastPorts.length], pod: p.code, description: ['Textiles', 'Machinery parts', 'Plastic granules', 'Frozen poultry', 'Ceramic tiles'][i % 5],
         hsCode: ['520812', '847990', '390110', '020714', '690721'][i % 5], packages: 100 + i * 13, grossKg: 18000 + i * 900,
         containers: Array.from({ length: 1 + (i % 3) }, () => ({ containerNo: cntr(owner, String(serial++)), isoType: serial % 2 ? '45G1' : '22G1', sealNo: `SL${serial}`, grossKg: 21000 })),
@@ -167,7 +168,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
       await c.query(`INSERT INTO truck_appointments (tenant_id, appt_no, terminal_id, haulier_org_id, direction, container_no, truck_plate, slot_start, slot_end, token, status, gate_in_at, gate_out_at)
         SELECT $1, $2 || '-TA-H' || lpad(g::text, 4, '0'), $3, $4, 'IMPORT_PICKUP', k.container_no, $5 || (1000+g), k.gated_out_at - interval '1 hour', k.gated_out_at, upper(substr(md5(random()::text),1,8)),
                'GATED_OUT', k.gated_out_at - interval '40 minutes' - (random()*interval '30 minutes'), k.gated_out_at
-        FROM (SELECT k.*, row_number() OVER () AS g FROM containers k WHERE k.call_id = ANY($6)) k`, [pid.tenant, p.code, pid.terminals[p.terminals[0].code], pid.orgs.HAULIER, p.code === 'ROCND' ? 'CT' : 'LAG', history]);
+        FROM (SELECT k.*, row_number() OVER () AS g FROM containers k WHERE k.call_id = ANY($6)) k`, [pid.tenant, p.code, pid.terminals[p.terminals[0].code], pid.orgs.HAULIER, p.plates, history]);
       await c.query(`INSERT INTO gate_events (tenant_id, terminal_id, appointment_id, truck_plate, container_no, direction, source, result, at)
         SELECT tenant_id, terminal_id, id, truck_plate, container_no, d, 'ANPR', 'ACCEPTED', CASE WHEN d='IN' THEN gate_in_at ELSE gate_out_at END FROM truck_appointments, unnest(ARRAY['IN','OUT']) d WHERE appt_no LIKE '%-TA-H%'`);
     });
@@ -187,7 +188,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
     const bls = await call('forwarder', 'GET', `/bls?callId=${c1.id}`);
     for (const [i, bl] of bls.entries()) {
       for (const k of (await call('forwarder', 'GET', `/bls/${bl.id}`)).containers) await call('terminal', 'POST', '/containers/events', { containerNo: k.container_no, event: 'DISCHARGED', at: new Date(eta1.getTime() + (5 + i) * H) });
-      if (i < 4) await call('forwarder', 'POST', `/bls/${bl.id}/declaration`, { declarationNo: `${p.code === 'ROCND' ? 'RO' : 'NG'}DEC2026${String(4410 + i)}` });
+      if (i < 4) await call('forwarder', 'POST', `/bls/${bl.id}/declaration`, { declarationNo: `${p.plates}DEC2026${String(4410 + i)}` });
       if (i < 2) await call('customs', 'POST', `/bls/${bl.id}/customs-status`, { status: 'RELEASED', remarks: 'Released — green channel' });
       if (i === 2) await call('customs', 'POST', `/bls/${bl.id}/customs-status`, { status: 'UNDER_INSPECTION', remarks: 'Selected for physical examination' });
     }
@@ -196,11 +197,11 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
     await call('forwarder', 'POST', '/delivery-orders', { blId: bls[1].id, haulierOrgId: pid.orgs.HAULIER });
     const bl0 = await call('forwarder', 'GET', `/bls/${bls[0].id}`);
     const slot = new Date(); slot.setUTCMinutes(0, 0, 0);
-    const ta = await call('haulier', 'POST', '/truck-appointments', { terminalId: pid.terminals[p.terminals[0].code], direction: 'IMPORT_PICKUP', containerNo: bl0.containers[0].container_no, doId: d1.id, truckPlate: p.code === 'ROCND' ? 'CT21PCS' : 'LAG482XA', driverName: 'Demo Driver', slotStart: slot });
+    const ta = await call('haulier', 'POST', '/truck-appointments', { terminalId: pid.terminals[p.terminals[0].code], direction: 'IMPORT_PICKUP', containerNo: bl0.containers[0].container_no, doId: d1.id, truckPlate: `${p.plates}21PCS`, driverName: 'Demo Driver', slotStart: slot });
     await call('terminal', 'POST', '/gate/transactions', { terminalId: pid.terminals[p.terminals[0].code], direction: 'IN', truckPlate: ta.truck_plate, token: ta.token, source: 'ANPR' });
     await call('terminal', 'POST', '/gate/transactions', { terminalId: pid.terminals[p.terminals[0].code], direction: 'OUT', truckPlate: ta.truck_plate, source: 'ANPR' });
-    await call('terminal', 'POST', '/gate/transactions', { terminalId: pid.terminals[p.terminals[0].code], direction: 'IN', truckPlate: p.code === 'ROCND' ? 'B999XYZ' : 'KJA001ZZ', source: 'ANPR' }); // rejected: no appointment
-    if (bl0.containers[1]) await call('haulier', 'POST', '/truck-appointments', { terminalId: pid.terminals[p.terminals[0].code], direction: 'IMPORT_PICKUP', containerNo: bl0.containers[1].container_no, doId: d1.id, truckPlate: p.code === 'ROCND' ? 'CT34PCS' : 'LAG913XB', driverName: 'Second Driver', slotStart: new Date(slot.getTime() + 2 * H) });
+    await call('terminal', 'POST', '/gate/transactions', { terminalId: pid.terminals[p.terminals[0].code], direction: 'IN', truckPlate: `${p.plates}999XYZ`, source: 'ANPR' }); // rejected: no appointment
+    if (bl0.containers[1]) await call('haulier', 'POST', '/truck-appointments', { terminalId: pid.terminals[p.terminals[0].code], direction: 'IMPORT_PICKUP', containerNo: bl0.containers[1].container_no, doId: d1.id, truckPlate: `${p.plates}34PCS`, driverName: 'Second Driver', slotStart: new Date(slot.getTime() + 2 * H) });
     const offers = await call('agent', 'GET', '/service-offerings');
     const pick = (t: string) => offers.find((o: any) => o.service_type === t);
     const s1 = await call('agent', 'POST', '/service-requests', { offeringId: pick('PILOTAGE').id, callId: c1.id, requestedFor: eta1 });
@@ -230,12 +231,12 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
 
     // Barges and rail
     const bargeBerth = Object.entries(pid.berths).find(([code]) => code.startsWith('BG') || code.startsWith('J'))![1];
-    const b1 = await call('barge', 'POST', '/barge-calls', { bargeName: p.code === 'ROCND' ? 'DUNAREA 7' : 'LAGOON 3', eni: p.code === 'ROCND' ? '45001234' : '61004321', convoyRef: 'CV-12', origin: p.code === 'ROCND' ? 'RSBEG' : 'NGLOS', destination: p.code, terminalId: pid.terminals.BARGE, berthId: bargeBerth, eta: new Date(Date.now() - 30 * H), tonnage: 1650, cargoDescription: 'Grain (wheat)' });
+    const b1 = await call('barge', 'POST', '/barge-calls', { bargeName: 'RIVER QUEEN 7', eni: p === PORTS[0] ? '99001234' : '99004321', convoyRef: 'CV-12', origin: p.bargeOrigin, destination: p.code, terminalId: pid.terminals.BARGE, berthId: bargeBerth, eta: new Date(Date.now() - 30 * H), tonnage: 1650, cargoDescription: 'Grain (wheat)' });
     for (const a of ['notify', 'arrive', 'start']) await call(a === 'notify' ? 'barge' : 'harbour', 'POST', `/barge-calls/${b1.id}/${a}`, a === 'arrive' ? { at: new Date(Date.now() - 26 * H) } : {});
     await call('harbour', 'POST', `/barge-calls/${b1.id}/depart`, { at: new Date(Date.now() - 6 * H) });
-    const b2 = await call('barge', 'POST', '/barge-calls', { bargeName: p.code === 'ROCND' ? 'GALATI 12' : 'LAGOON 5', eni: p.code === 'ROCND' ? '45009876' : '61009876', origin: p.code === 'ROCND' ? 'ROGLU' : 'NGLOS', destination: p.code, terminalId: pid.terminals.BARGE, eta: new Date(Date.now() + 14 * H), tonnage: 1200, cargoDescription: 'Steel coils' });
+    const b2 = await call('barge', 'POST', '/barge-calls', { bargeName: 'DELTA CARRIER 12', eni: p === PORTS[0] ? '99009876' : '99006789', origin: p.bargeOrigin, destination: p.code, terminalId: pid.terminals.BARGE, eta: new Date(Date.now() + 14 * H), tonnage: 1200, cargoDescription: 'Steel coils' });
     await call('barge', 'POST', `/barge-calls/${b2.id}/notify`);
-    const r1 = await call('rail', 'POST', '/rail-visits', { trainNo: p.code === 'ROCND' ? 'CFR-80451' : 'NRC-2207', direction: 'OUTBOUND', terminalId: pid.terminals[p.terminals[0].code], origin: p.code, destination: p.code === 'ROCND' ? 'HUBUD' : 'NGKAN', eta: new Date(Date.now() + 8 * H), wagons: [{ wagonNo: '31 53 4560 001-2', containers: [], cargo: 'Containers', tonnes: 52 }, { wagonNo: '31 53 4560 002-0', containers: [], cargo: 'Containers', tonnes: 48 }] });
+    const r1 = await call('rail', 'POST', '/rail-visits', { trainNo: `${p.plates}-80451`, direction: 'OUTBOUND', terminalId: pid.terminals[p.terminals[0].code], origin: p.code, destination: p.railDestination, eta: new Date(Date.now() + 8 * H), wagons: [{ wagonNo: '31 53 4560 001-2', containers: [], cargo: 'Containers', tonnes: 52 }, { wagonNo: '31 53 4560 002-0', containers: [], cargo: 'Containers', tonnes: 48 }] });
     await call('rail', 'POST', `/rail-visits/${r1.id}/announce`);
 
     // EDI: a terminal CODECO (gate-out) to populate the EDI monitor and APERAK flow
@@ -245,7 +246,7 @@ export async function seed(opts: { force?: boolean; log?: (m: string) => void } 
     log(`seed: ${p.code} scenarios complete`);
   }
   await app.close();
-  await withTenant('*', (c) => c.query('INSERT INTO seed_state (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET completed_at = now()'));
+  await withTenant('*', (c) => c.query('INSERT INTO seed_state (id, version) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET completed_at = now(), version = EXCLUDED.version', [SEED_VERSION]));
   log(process.env.DEMO_PASSWORD ? "seed: done — demo users use the DEMO_PASSWORD secret" : `seed: done — demo password "${DEMO_PASSWORD}"`);
 }
 

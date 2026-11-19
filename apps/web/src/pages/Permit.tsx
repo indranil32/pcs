@@ -34,7 +34,7 @@ export default function Permit() {
       <table className="mt-2 w-full text-sm">
         <tbody>{p.approvals.map((a: any) => <tr key={a.agency} className="border-b border-slate-100"><td className="py-2">{label(a.agency)}</td><td className="py-2 font-medium text-emerald-700">{a.status}</td><td className="py-2 text-slate-500">{fmtDateTime(a.decided_at)}</td></tr>)}</tbody>
       </table>
-      <p className="mt-8 text-xs text-slate-400">Issued electronically by the {p.port} Port Community System (Maqta PCS). Verify authenticity by scanning the QR code. Valid for the call referenced above only.</p>
+      <p className="mt-8 text-xs text-slate-400">Issued electronically by the {p.port} Port Community System. Verify authenticity by scanning the QR code. Valid for the call referenced above only.</p>
       <button onClick={() => print()} className="mt-6 rounded-md bg-navy-900 px-4 py-2 text-sm text-white print:hidden">Print</button>
     </div>
   );

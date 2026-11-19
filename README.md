@@ -1,8 +1,8 @@
-# Maqta PCS — Port Community System
+# PCS — Port Community System
 
-Multi-tenant Port Community System by **Maqta Technologies (TradeTech) · AD Ports Group**, built from the generic
-PCS PRD v2.1, the Romania (Port of Constanța) requirements matrix and the Nigeria (NPA / Lagos-Apapa) proposal.
-Each **port is a tenant**; one deployment can serve several ports with full data isolation.
+A generic, multi-tenant Port Community System product. Each **port is a tenant**; one deployment can serve
+several ports with full data isolation. The product is configured per port (clearance agencies, required FAL forms,
+tariffs, currency, VAT, languages, truck slot capacity, barge/rail operations) rather than customised in code.
 
 > Status: **v0.1, working end to end.** Every flow below runs against a real PostgreSQL database and is covered by
 > integration tests. External systems (customs, payment gateway, AIS/VTMS, ERP) sit behind adapters that run in
@@ -12,12 +12,12 @@ Each **port is a tenant**; one deployment can serve several ports with full data
 
 | Area (PRD module) | Capabilities |
 |---|---|
-| **Platform** (FR-PLT, FR-ORG) | Port-per-tenant with PostgreSQL row-level security · 18 roles · JWT sign-in and `x-api-key` for systems · organisation self-registration with port-admin approval · notifications · audit trail on every change · documents with SHA-256 · stakeholder messages · EN / RO / UK portal |
+| **Platform** (FR-PLT, FR-ORG) | Port-per-tenant with PostgreSQL row-level security · 18 roles · JWT sign-in and `x-api-key` for systems · organisation self-registration with port-admin approval · notifications · audit trail on every change · documents with SHA-256 · stakeholder messages · multilingual portal (language packs per port) |
 | **Vessel calls** (FR-VES) | Berthing request → berth allocation (LOA, under-keel clearance and window-clash checks, audited override) → pre-arrival notification → arrival → all fast → departure · berth plan Gantt · cancellation |
 | **Single Window** (FR-SWN) | IMO FAL 1–7 forms with validation (FAL 4 excluded by default, per IPCSA/GDPR) · each agency approves, rejects or queries independently, with the agency list configured per port · port entry permit issued automatically when all agencies approve, printable with a QR code anyone can verify · departure clearance |
 | **Cargo & customs** (FR-CGO, FR-CUS, FR-CON) | Manifests (portal, REST or EDI CUSCAR) with ISO 6346 / HS / UN/LOCODE validation and amendment versioning · B/L-level customs status exchange (declared → inspection → released / held) · automatic customs holds · container tracking and dwell time |
 | **eDO & gate** (FR-GAT) | Electronic delivery order (forwarder requests, shipping line issues with a PIN) · slot-based truck appointment system with capacity per terminal · gate console checking the appointment, eDO, customs release and holds in one step · every gate attempt logged |
-| **Hinterland** (FR-TRS) | Danube / inland barge calls (ENI) · rail visits with wagon lists |
+| **Hinterland** (FR-TRS) | Inland barge calls (ENI) · rail visits with wagon lists |
 | **Marine services** (FR-MKT, FR-VAS) | Provider catalogue · requests linked to the vessel call · accept, schedule and complete · auto-billing |
 | **Finance** (FR-FIN) | Tariff book (per call / GT / LOA-day / TEU / tonne / unit, with minimums and conditions) · invoices rated automatically at each billable event · VAT per port · payment (mock gateway) · ERP journal export |
 | **Integration** (FR-INT) | UN/EDIFACT engine: inbound CUSCAR, CODECO, COARRI, BERMAN, CUSRES; outbound APERAK and CUSCAR · webhooks signed with HMAC · transactional outbox (Kafka-ready) · OpenAPI 3 at `/api/docs` |
@@ -25,7 +25,7 @@ Each **port is a tenant**; one deployment can serve several ports with full data
 
 ## System boundaries
 
-These boundaries follow Annex 3 of the Constanța offer:
+These boundaries follow IPCSA guidance on PCS scope:
 
 - **TOS**: yard planning and equipment stay in the terminal operating system. PCS receives movements (CODECO, COARRI, API) and sends appointments and releases.
 - **Customs Management System**: PCS does not assess declarations. It links the declaration number and carries the release or hold status, from customs users or from the customs system via API / CUSRES.
@@ -48,7 +48,7 @@ infra/        Azure Bicep (Container Apps + PostgreSQL Flexible Server) and GitH
 transaction with `app.tenant_id` set, and every operational table has a `tenant_isolation` policy. Even a query
 missing its `WHERE tenant_id` cannot leak another port's data.
 
-**Why TypeScript end to end** (and not the Angular / .NET stack in the proposals): one language across API, portal,
+**Why TypeScript end to end**: one language across API, portal,
 EDI tooling and the shared domain model lets one team move faster on 27 modules. The module boundaries map one-to-one
 to the PRD, so splitting into services later (e.g. EDI gateway, gate) is mechanical. The outbox already records every
 domain event for a Kafka producer.
@@ -73,12 +73,13 @@ npm test            # integration tests against a real database
 
 ### Demo data
 
-Two ports are seeded: **Port of Constanța (ROCND)**, with RON, trilingual UI, border police and barges, and
-**Lagos Port Complex, Apapa (NGAPP)**, with NGN, immigration, NIMASA and NICIS II. Authorities and terminals mirror the
-real ports; every commercial party, vessel, B/L and container is fictitious. Accounts follow `<role>@rocnd.demo` /
-`<role>@ngapp.demo`. Roles: agent, harbour, customs, border, health, immigration, maritime, line, forwarder, haulier,
-terminal, barge, rail, services, finance, portadmin, exec. The platform admin is `admin@pcs.demo`. The password is
-`DEMO_PASSWORD` (default `PcsDemo!2026` locally; set a secret in Azure).
+Two **fictional** ports are seeded: **Demo Port Alpha (ZZALP)**, with EUR, three language packs, border police,
+barges and rail, and **Demo Port Beta (ZZBET)**, with USD, immigration and maritime administration. All names,
+vessels, B/Ls and containers are synthetic; UN/LOCODEs use the ISO user-assigned country code `ZZ`, and map
+coordinates sit in open ocean near 0°/0°. Accounts follow `<role>@zzalp.demo` / `<role>@zzbet.demo`. Roles: agent,
+harbour, customs, border, health, immigration, maritime, line, forwarder, haulier, terminal, barge, rail, services,
+finance, portadmin, exec. The platform admin is `admin@pcs.demo`. The password is `DEMO_PASSWORD` (default
+`PcsDemo!2026` locally; generated on Azure).
 
 Suggested demo path (about 15 min): agent creates a call, submits the berthing request → harbour master allocates
 a berth (try an undersized berth to see the checks) → agent fills in the FAL forms and submits pre-arrival → each
@@ -88,42 +89,41 @@ slot → terminal processes gate in and out → departure → invoice → pay.
 
 ## Deploy to Azure (GitHub Actions)
 
-The pipeline (`.github/workflows/ci-cd.yml`) follows the same pattern as port-esg: typecheck and integration
+The pipeline (`.github/workflows/ci-cd.yml`): typecheck and integration
 tests → security scans (npm audit, gitleaks, Trivy, Bicep build) → image build, scan and boot smoke test → push to
 GHCR → **Bicep deployment** (infrastructure and new image in one step) → health wait → smoke tests against Azure →
 automatic rollback on failure.
 
-PCS shares the ESG app's **Container Apps environment** and **PostgreSQL server**. It gets its own `pcs` database
-with roles `pcs_owner` (migrations) and `pcs_app` (runtime, row-level security), so ESG data is not touched and
-PCS never stores ESG's admin password. The deploy job creates the database and roles idempotently, using ESG's
-connection read from Azure and a temporary firewall rule for the runner. No GitHub secrets are needed: PCS
-passwords are generated on the first deploy and kept only in the PCS container app's secrets.
+PCS can share an existing resource group's **Container Apps environment** and **PostgreSQL server**
+(`SHARED_RESOURCE_GROUP`). It gets its own `pcs` database with roles `pcs_owner` (migrations) and `pcs_app`
+(runtime, row-level security), so the other app's data is not touched and PCS never stores that server's admin
+password. The deploy job creates the database and roles idempotently, using the admin connection read from the app
+that owns the server and a temporary firewall rule for the runner. No GitHub secrets are needed: PCS passwords are
+generated on the first deploy and kept only in the PCS container app's secrets.
 
 One-time setup:
 
-1. In Azure Cloud Shell, run `bash infra/github-oidc-setup.sh`. It creates `rg-pcs-dev` and a federated identity
-   with Contributor on the PCS and ESG resource groups, then prints five variables.
+1. In Azure Cloud Shell, run `bash infra/github-oidc-setup.sh <shared-resource-group>`. It creates `rg-pcs-dev`
+   and a federated identity with Contributor on both resource groups, then prints five variables.
 2. In GitHub, go to **Settings → Environments → `azure-dev` → Variables** and add `AZURE_CLIENT_ID`,
-   `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `ESG_RESOURCE_GROUP`. Optionally add a
-   secret `PCS_DEMO_PASSWORD`; otherwise one is generated. Read it with
-   `az containerapp secret show -g rg-pcs-dev -n <app> --secret-name demo-password`.
-3. GitHub now sends an **ID-based OIDC subject** (`repo:<owner>@<ownerId>/<repo>@<repoId>:environment:azure-dev`).
+   `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `SHARED_RESOURCE_GROUP`.
+3. GitHub may send an **ID-based OIDC subject** (`repo:<owner>@<ownerId>/<repo>@<repoId>:environment:azure-dev`).
    If Azure login fails with AADSTS700213, add a federated credential with the subject shown in the error.
-4. Make the GHCR package `ghcr.io/indranil32/pcs` **public**, as for port-esg, then re-run the workflow.
+4. Make the GHCR package public (or switch to a private registry), then re-run the workflow.
 
 Until the variables exist, the deploy job skips with a warning, so CI still passes. `infra/prod.bicepparam` holds
-production settings (UAE North, General Purpose PostgreSQL, no demo seed, no AIS simulator).
+production settings (General Purpose PostgreSQL, no demo seed, no AIS simulator).
 
 ## Live demo (Azure, dev)
 
 https://ca-pcsdev-tzfhzwahj7vd6.redplant-0c2283f6.centralindia.azurecontainerapps.io (synthetic data). Demo users
-`<role>@rocnd.demo` / `<role>@ngapp.demo`; read the password with
+`<role>@zzalp.demo` / `<role>@zzbet.demo`; read the password with
 `az containerapp secret show -g rg-pcs-dev -n ca-pcsdev-tzfhzwahj7vd6 --secret-name demo-password --query value -o tsv`.
 
 ## Roadmap to production
 
-- Real adapters: Romanian customs / NICIS II, payment gateways (Remita, bank), AIS/VTMS feed, ERP posting, EU MSW / eIDAS signatures
-- Entra ID / SAML SSO for authority users (pattern from port-esg)
+- Real adapters: national customs systems, payment gateways, AIS/VTMS feed, ERP posting, qualified electronic signatures
+- Entra ID / SAML SSO for authority users
 - Mobile app (FR-MOB), AI features (ETA prediction, OCR, port copilot on on-prem Ollama), compliance tracker
 - Kafka producer on the outbox; VNet-integrated PostgreSQL with a private endpoint; blob storage for large documents
-- Requirement-ID traceability against PRD v2.1 / Romania matrix v3.3 (module codes are already in the source headers)
+- Requirement-ID traceability against the PRD (module codes are already in the source headers)

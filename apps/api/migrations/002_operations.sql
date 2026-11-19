@@ -182,7 +182,7 @@ CREATE TABLE gate_events (
   at timestamptz NOT NULL DEFAULT now()
 );
 
--- FR-TRS: barge (Danube) and rail
+-- FR-TRS: inland waterway barges and rail
 CREATE TABLE barge_calls (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),

@@ -1,4 +1,4 @@
-// Trilingual UI (Romanian / English / Ukrainian) per the Constanța requirement; other ports default to English.
+// Multilingual UI. Each port enables the language packs it needs (settings.languages); English is the default.
 import { useSyncExternalStore } from 'react';
 
 export type Lang = 'en' | 'ro' | 'uk';

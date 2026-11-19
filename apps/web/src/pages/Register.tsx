@@ -44,7 +44,7 @@ export default function Register() {
               <Field label="Organisation type"><Select value={f.type} onChange={set('type')} options={ORG_TYPES.filter((x) => !['PORT_AUTHORITY', 'GOVERNMENT_AGENCY'].includes(x)).map((x) => ({ value: x, label: label(x) }))} /></Field>
               <Field label="Legal name" className="sm:col-span-2"><Input required value={f.name ?? ''} onChange={set('name')} /></Field>
               <Field label="Trade registry number"><Input required value={f.registrationNo ?? ''} onChange={set('registrationNo')} /></Field>
-              <Field label="Tax ID (CUI / TIN)"><Input value={f.taxId ?? ''} onChange={set('taxId')} /></Field>
+              <Field label="Tax ID"><Input value={f.taxId ?? ''} onChange={set('taxId')} /></Field>
               <Field label="Company email"><Input type="email" required value={f.orgEmail ?? ''} onChange={set('orgEmail')} /></Field>
               <Field label="Phone"><Input value={f.phone ?? ''} onChange={set('phone')} /></Field>
               <Field label="Address" className="sm:col-span-2"><Input value={f.address ?? ''} onChange={set('address')} /></Field>

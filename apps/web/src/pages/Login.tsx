@@ -19,7 +19,7 @@ export default function Login() {
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [port, setPort] = useState<'rocnd' | 'ngapp'>('rocnd');
+  const [port, setPort] = useState<'zzalp' | 'zzbet'>('zzalp');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   if (me) return <Navigate to="/" replace />;
@@ -37,8 +37,8 @@ export default function Login() {
         <div className="relative flex items-center gap-3">
           <img src="/favicon.svg" className="h-10 w-10" alt="" />
           <div>
-            <div className="text-lg font-semibold">Maqta PCS</div>
-            <div className="text-xs text-teal-400">Maqta Technologies (TradeTech) · AD Ports Group</div>
+            <div className="text-lg font-semibold">PCS</div>
+            <div className="text-xs text-teal-400">Port Community System</div>
           </div>
         </div>
         <div className="relative my-10">
@@ -73,13 +73,13 @@ export default function Login() {
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('demoAccounts')}</span>
               <div className="flex gap-1 rounded-md bg-slate-100 p-0.5 text-xs">
-                {(['rocnd', 'ngapp'] as const).map((p) => (
-                  <button key={p} onClick={() => setPort(p)} className={`rounded px-2 py-1 font-medium ${port === p ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-500'}`}>{p === 'rocnd' ? 'Constanța' : 'Lagos / Apapa'}</button>
+                {(['zzalp', 'zzbet'] as const).map((p) => (
+                  <button key={p} onClick={() => setPort(p)} className={`rounded px-2 py-1 font-medium ${port === p ? 'bg-white text-navy-900 shadow-sm' : 'text-slate-500'}`}>{p === 'zzalp' ? 'Demo Port Alpha' : 'Demo Port Beta'}</button>
                 ))}
               </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {DEMO.filter(([, k]) => !(port === 'rocnd' && k === 'immigration') && !(port === 'ngapp' && k === 'border')).map(([n, k]) => (
+              {DEMO.filter(([, k]) => !(port === 'zzalp' && k === 'immigration') && !(port === 'zzbet' && k === 'border')).map(([n, k]) => (
                 <button key={k} onClick={() => { setEmail(`${k}@${port}.demo`); setPassword(''); }} className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:border-teal-500 hover:text-teal-600">{n}</button>
               ))}
               <button onClick={() => { setEmail('admin@pcs.demo'); setPassword(''); }} className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:border-teal-500 hover:text-teal-600">Platform admin</button>

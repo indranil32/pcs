@@ -65,7 +65,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <Link to="/" className="flex items-center gap-2.5 px-5 py-4">
           <img src="/favicon.svg" className="h-8 w-8" alt="" />
           <div>
-            <div className="text-sm font-semibold leading-tight text-white">Maqta PCS</div>
+            <div className="text-sm font-semibold leading-tight text-white">PCS</div>
             <div className="text-[11px] leading-tight text-teal-400">{me?.tenant.name}</div>
           </div>
         </Link>
@@ -86,7 +86,7 @@ export function Layout({ children }: { children: ReactNode }) {
           })}
         </nav>
         <a href="/api/docs" target="_blank" rel="noreferrer" className="mx-3 mb-3 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-400 hover:bg-navy-800 hover:text-white"><BookOpen className="h-3.5 w-3.5" />API documentation</a>
-        <div className="border-t border-navy-800 px-5 py-3 text-[11px] text-slate-500">Maqta Technologies (TradeTech) · AD Ports Group</div>
+        <div className="border-t border-navy-800 px-5 py-3 text-[11px] text-slate-500">Port Community System</div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

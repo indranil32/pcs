@@ -161,7 +161,7 @@ export default async function finance(app: FastifyInstance) {
       if (!inv) throw notFound();
       if (inv.customer_org_id !== req.actor.orgId && !hasRole(req.actor, 'FINANCE')) throw forbidden('Only the customer can pay this invoice');
       if (inv.status !== 'ISSUED') throw conflict(`Invoice is ${inv.status}`);
-      // Payment gateway adapter: MOCK_GATEWAY in dev; Remita (NG) / bank gateway (RO) adapters plug in here.
+      // Payment gateway adapter: MOCK_GATEWAY in dev; national payment / bank gateway adapters plug in here.
       const ref = `PAY-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
       const p = await insert(c, 'payments', { tenant_id: req.actor.tenantId, invoice_id: id, amount: inv.total, currency: inv.currency, method: b.method, provider_ref: ref, status: 'SUCCEEDED', paid_by: req.actor.userId });
       await update(c, 'invoices', id, { status: 'PAID', paid_at: new Date() });

@@ -91,7 +91,7 @@ export default async function operations(app: FastifyInstance) {
     });
   });
 
-  // ================= Barge operations (inland waterway, e.g. Danube–Black Sea) =================
+  // ================= Barge operations (inland waterway) =================
   const bargeIn = z.object({
     bargeName: z.string().min(2), eni: z.string().refine(isValidEni, 'ENI must be 8 digits'), convoyRef: z.string().optional(),
     origin: z.string().optional(), destination: z.string().optional(), terminalId: z.string().uuid().optional(), berthId: z.string().uuid().optional(),

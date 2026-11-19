@@ -164,7 +164,7 @@ function Settings() {
           <Field label="VAT rate"><Input type="number" step="0.001" value={v.vatRate} onChange={(e) => setDraft({ ...v, vatRate: Number(e.target.value) })} /></Field>
           <Field label="Truck slot length (min)"><Input type="number" value={v.truckSlotMinutes} onChange={(e) => setDraft({ ...v, truckSlotMinutes: Number(e.target.value) })} /></Field>
           <Field label="Trucks per slot per terminal"><Input type="number" value={v.truckSlotCapacity} onChange={(e) => setDraft({ ...v, truckSlotCapacity: Number(e.target.value) })} /></Field>
-          <Field label="Customs system adapter"><Select value={v.customsSystem} onChange={(e) => setDraft({ ...v, customsSystem: e.target.value })} options={[{ value: 'MOCK', label: 'Mock (demo)' }, { value: 'NICIS_II', label: 'NICIS II (Nigeria)' }, { value: 'RO_CUSTOMS', label: 'Romanian Customs (BVBS)' }]} /></Field>
+          <Field label="Customs system adapter"><Select value={v.customsSystem} onChange={(e) => setDraft({ ...v, customsSystem: e.target.value })} options={[{ value: 'MOCK', label: 'Mock (demo)' }, { value: 'REST_API', label: 'Customs system — REST API' }, { value: 'EDIFACT', label: 'Customs system — EDIFACT (CUSCAR/CUSRES)' }]} /></Field>
           <Field label="Portal languages"><Input value={v.languages.join(',')} onChange={(e) => setDraft({ ...v, languages: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} /></Field>
         </div>
       </div>

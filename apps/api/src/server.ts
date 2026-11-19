@@ -30,7 +30,7 @@ export async function buildApp(opts: { logger?: boolean; gated?: boolean } = {})
   await app.register(swagger, {
     openapi: {
       info: {
-        title: 'Maqta PCS API',
+        title: 'PCS API — Port Community System',
         version: '0.1.0',
         description:
           'Port Community System B2B/B2G API. Authenticate with `Authorization: Bearer <JWT>` (portal users) or `x-api-key` (system-to-system). All resources are scoped to the caller\'s port (tenant).',

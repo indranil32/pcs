@@ -2,7 +2,7 @@
   "name": "pcs",
   "private": true,
   "version": "0.1.0",
-  "description": "Maqta PCS — multi-tenant Port Community System (TradeTech, AD Ports Group)",
+  "description": "PCS — multi-tenant Port Community System",
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "db:migrate": "npm -w @pcs/api run migrate",

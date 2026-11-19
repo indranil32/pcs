@@ -1,4 +1,4 @@
-// Maqta PCS — Azure deployment (Container Apps + PostgreSQL Flexible Server + Log Analytics).
+// PCS — Azure deployment (Container Apps + PostgreSQL Flexible Server + Log Analytics).
 // Same template for a personal trial subscription and the company subscription: only the parameters differ.
 //   az group create -n rg-pcs-dev -l centralindia
 //   az deployment group create -g rg-pcs-dev -f infra/main.bicep -p infra/dev.bicepparam
@@ -19,10 +19,10 @@ param dbLocation string = location
 @description('Container image, e.g. ghcr.io/indranil32/pcs:<sha>.')
 param image string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
-@description('Reuse an existing Container Apps environment (resource ID). Trial subscriptions allow only one environment per region — pass the ESG environment here to share it. Blank creates a new one.')
+@description('Reuse an existing Container Apps environment (resource ID). Trial subscriptions allow only one environment per region — pass an existing environment here to share it. Blank creates a new one.')
 param existingEnvironmentId string = ''
 
-@description('Use an existing PostgreSQL flexible server (FQDN), e.g. the ESG server. Blank creates a dedicated server. The pcs database and roles must exist (the CI/CD workflow creates them).')
+@description('Use an existing PostgreSQL flexible server (FQDN), e.g. a server shared with another app. Blank creates a dedicated server. The pcs database and roles must exist (the CI/CD workflow creates them).')
 param existingPostgresHost string = ''
 
 @description('Role that owns the pcs database and runs migrations.')
@@ -40,7 +40,7 @@ param appDbPassword string
 @description('Long random string used to sign JWTs.')
 param jwtSecret string
 
-@description('true loads the synthetic Constanța + Lagos demo data on first start. Must be false for real data.')
+@description('true loads the synthetic two-port demo data on first start. Must be false for real data.')
 param seedDemoData bool = false
 
 @secure()

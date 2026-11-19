@@ -2,7 +2,7 @@
 
 CREATE TABLE tenants (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code text UNIQUE NOT NULL,                -- e.g. ROCND, NGAPP
+  code text UNIQUE NOT NULL,                -- UN/LOCODE of the port, e.g. ZZALP
   name text NOT NULL,
   country char(2) NOT NULL,
   timezone text NOT NULL DEFAULT 'UTC',

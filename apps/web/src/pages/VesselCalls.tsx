@@ -60,7 +60,7 @@ export function NewCall({ open, onClose, onCreated }: { open: boolean; onClose: 
   return (
     <Modal open={open} onClose={onClose} title="New vessel call" wide footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={create.isPending} onClick={() => create.mutate()} disabled={!f.vesselId}>Create draft</Button></>}>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Find vessel (name or IMO)" className="sm:col-span-1"><Input value={vs} onChange={(e) => setVs(e.target.value)} placeholder="e.g. EUXIN" /></Field>
+        <Field label="Find vessel (name or IMO)" className="sm:col-span-1"><Input value={vs} onChange={(e) => setVs(e.target.value)} placeholder="e.g. OCEAN" /></Field>
         <Field label="Vessel" className="sm:col-span-2"><Select value={f.vesselId ?? ''} onChange={set('vesselId')} placeholder="Select vessel…" options={(vessels.data ?? []).map((v) => ({ value: v.id, label: `${v.name} — IMO ${v.imo} · ${label(v.type)} · LOA ${v.loa} m` }))} /></Field>
         <Field label="Voyage in"><Input value={f.voyageIn ?? ''} onChange={set('voyageIn')} /></Field>
         <Field label="Voyage out"><Input value={f.voyageOut ?? ''} onChange={set('voyageOut')} /></Field>
@@ -68,7 +68,7 @@ export function NewCall({ open, onClose, onCreated }: { open: boolean; onClose: 
         <Field label="ETA"><Input type="datetime-local" value={f.eta} onChange={set('eta')} /></Field>
         <Field label="ETD"><Input type="datetime-local" value={f.etd} onChange={set('etd')} /></Field>
         <Field label="Arrival draft (m)"><Input type="number" step="0.1" value={f.arrivalDraft ?? ''} onChange={set('arrivalDraft')} /></Field>
-        <Field label="Last port (UN/LOCODE)"><Input maxLength={5} value={f.lastPort ?? ''} onChange={set('lastPort')} placeholder="TRIST" /></Field>
+        <Field label="Last port (UN/LOCODE)"><Input maxLength={5} value={f.lastPort ?? ''} onChange={set('lastPort')} placeholder="ZZNRT" /></Field>
         <Field label="Next port (UN/LOCODE)"><Input maxLength={5} value={f.nextPort ?? ''} onChange={set('nextPort')} /></Field>
         <Field label="Requested berth"><Select value={f.requestedBerthId ?? ''} onChange={set('requestedBerthId')} placeholder="No preference" options={(berths.data ?? []).filter((b) => !b.barge_berth).map((b) => ({ value: b.id, label: `${b.code} — ${b.terminal_name ?? ''} (${b.length_m} m / ${b.depth_m} m)` }))} /></Field>
         <Field label="Shipping line"><Select value={f.lineOrgId ?? ''} onChange={set('lineOrgId')} placeholder="—" options={(lines.data ?? []).map((o) => ({ value: o.id, label: o.name }))} /></Field>

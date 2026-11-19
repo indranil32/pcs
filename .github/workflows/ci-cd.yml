@@ -130,13 +130,13 @@ jobs:
       contents: read
     env:
       RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-      ESG_RG: ${{ vars.ESG_RESOURCE_GROUP }}
+      SHARED_RG: ${{ vars.SHARED_RESOURCE_GROUP }}
     steps:
       - name: Check Azure configuration
         id: cfg
         run: |
-          if [ -z "${{ vars.AZURE_CLIENT_ID }}" ] || [ -z "$RG" ] || [ -z "$ESG_RG" ]; then
-            echo "::warning::Set AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP and ESG_RESOURCE_GROUP on the azure-dev environment (see infra/github-oidc-setup.sh). Skipping deployment."
+          if [ -z "${{ vars.AZURE_CLIENT_ID }}" ] || [ -z "$RG" ] || [ -z "$SHARED_RG" ]; then
+            echo "::warning::Set AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP and SHARED_RESOURCE_GROUP on the azure-dev environment (see infra/github-oidc-setup.sh). Skipping deployment."
             echo "ready=false" >> $GITHUB_OUTPUT
           else
             echo "ready=true" >> $GITHUB_OUTPUT
@@ -153,16 +153,16 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      # Shared with ESG: its Container Apps environment and PostgreSQL server (PCS gets its own database and roles).
-      - name: Discover shared ESG resources
+      # Optional sharing: an existing resource group's Container Apps environment and PostgreSQL server (PCS gets its own database and roles).
+      - name: Discover shared environment and database server
         if: steps.cfg.outputs.ready == 'true'
         run: |
-          PG=$(az postgres flexible-server list -g "$ESG_RG" --query "[0].name" -o tsv)
-          PG_HOST=$(az postgres flexible-server show -g "$ESG_RG" -n "$PG" --query fullyQualifiedDomainName -o tsv)
-          ENV_ID=$(az containerapp env list -g "$ESG_RG" --query "[0].id" -o tsv)
-          ESG_APP=$(az containerapp list -g "$ESG_RG" --query "[0].name" -o tsv)
-          [ -n "$PG" ] && [ -n "$ENV_ID" ] && [ -n "$ESG_APP" ] || { echo "::error::ESG server/environment/app not found in $ESG_RG"; exit 1; }
-          echo "PG=$PG" >> $GITHUB_ENV; echo "PG_HOST=$PG_HOST" >> $GITHUB_ENV; echo "ENV_ID=$ENV_ID" >> $GITHUB_ENV; echo "ESG_APP=$ESG_APP" >> $GITHUB_ENV
+          PG=$(az postgres flexible-server list -g "$SHARED_RG" --query "[0].name" -o tsv)
+          PG_HOST=$(az postgres flexible-server show -g "$SHARED_RG" -n "$PG" --query fullyQualifiedDomainName -o tsv)
+          ENV_ID=$(az containerapp env list -g "$SHARED_RG" --query "[0].id" -o tsv)
+          DB_OWNER_APP=$(az containerapp list -g "$SHARED_RG" --query "[0].name" -o tsv)
+          [ -n "$PG" ] && [ -n "$ENV_ID" ] && [ -n "$DB_OWNER_APP" ] || { echo "::error::Shared server/environment/app not found in $SHARED_RG"; exit 1; }
+          echo "PG=$PG" >> $GITHUB_ENV; echo "PG_HOST=$PG_HOST" >> $GITHUB_ENV; echo "ENV_ID=$ENV_ID" >> $GITHUB_ENV; echo "DB_OWNER_APP=$DB_OWNER_APP" >> $GITHUB_ENV
           echo "Shared server $PG_HOST, environment $(basename $ENV_ID)"
 
       # Passwords live only in the PCS container app's secrets: generated on the first deploy, read back afterwards.
@@ -185,14 +185,14 @@ jobs:
       - name: Create pcs database and roles on the shared server (idempotent)
         if: steps.cfg.outputs.ready == 'true'
         run: |
-          ESG_URL=$(az containerapp secret show -g "$ESG_RG" -n "$ESG_APP" --secret-name database-url --query value -o tsv | sed -E 's#^postgres(ql)?(\+[a-z0-9]+)?://#postgresql://#')
-          echo "::add-mask::$ESG_URL"
-          case "$ESG_URL" in *sslmode=*) ;; *\?*) ESG_URL="$ESG_URL&sslmode=require" ;; *) ESG_URL="$ESG_URL?sslmode=require" ;; esac
+          SHARED_DB_URL=$(az containerapp secret show -g "$SHARED_RG" -n "$DB_OWNER_APP" --secret-name database-url --query value -o tsv | sed -E 's#^postgres(ql)?(\+[a-z0-9]+)?://#postgresql://#')
+          echo "::add-mask::$SHARED_DB_URL"
+          case "$SHARED_DB_URL" in *sslmode=*) ;; *\?*) SHARED_DB_URL="$SHARED_DB_URL&sslmode=require" ;; *) SHARED_DB_URL="$SHARED_DB_URL?sslmode=require" ;; esac
           IP=$(curl -fsS https://api.ipify.org)
           RULE=gh-pcs-${{ github.run_id }}
-          az postgres flexible-server firewall-rule create -g "$ESG_RG" --server-name "$PG" --name "$RULE" --start-ip-address "$IP" --end-ip-address "$IP" -o none
-          trap 'az postgres flexible-server firewall-rule delete -g "$ESG_RG" --server-name "$PG" --name "$RULE" --yes -o none' EXIT
-          psql "$ESG_URL" -v ON_ERROR_STOP=1 -q -v ownerpw="$PCS_DB_ADMIN_PASSWORD" -v apppw="$PCS_APP_DB_PASSWORD" <<'SQL'
+          az postgres flexible-server firewall-rule create -g "$SHARED_RG" --server-name "$PG" --name "$RULE" --start-ip-address "$IP" --end-ip-address "$IP" -o none
+          trap 'az postgres flexible-server firewall-rule delete -g "$SHARED_RG" --server-name "$PG" --name "$RULE" --yes -o none' EXIT
+          psql "$SHARED_DB_URL" -v ON_ERROR_STOP=1 -q -v ownerpw="$PCS_DB_ADMIN_PASSWORD" -v apppw="$PCS_APP_DB_PASSWORD" <<'SQL'
           SELECT format('CREATE ROLE pcs_owner LOGIN CREATEROLE PASSWORD %L', :'ownerpw') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pcs_owner') \gexec
           SELECT format('ALTER ROLE pcs_owner WITH LOGIN CREATEROLE PASSWORD %L', :'ownerpw') \gexec
           SELECT format('CREATE ROLE pcs_app LOGIN PASSWORD %L', :'apppw') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pcs_app') \gexec

@@ -11,7 +11,7 @@ export default function Verify() {
   return (
     <div className="flex min-h-full items-center justify-center p-6">
       <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow">
-        <div className="text-xs uppercase tracking-widest text-teal-600">Maqta PCS · permit verification</div>
+        <div className="text-xs uppercase tracking-widest text-teal-600">PCS · permit verification</div>
         {q.isLoading && <p className="mt-4 text-slate-400">Checking…</p>}
         {q.error && <div className="mt-4 flex items-center gap-2 text-red-600"><XCircle className="h-6 w-6" />No permit found with number {no}</div>}
         {d && (

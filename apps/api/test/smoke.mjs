@@ -22,8 +22,8 @@ await check('health', async () => { const h = await get('/health'); if (h.status
 await check('portal served', async () => { const html = await get('/'); if (!html.includes('<div id="root">')) throw new Error('index.html missing'); });
 await check('OpenAPI docs', async () => { await get('/api/docs/json'); });
 await check('public ports', async () => { const p = await get('/api/public/ports'); if (!p.length) throw new Error('no ports'); });
-await check('WTO 7.6 release time (public)', async () => { await get('/api/public/ROCND/release-time'); });
-for (const email of ['agent@rocnd.demo', 'harbour@rocnd.demo', 'customs@ngapp.demo']) {
+await check('WTO 7.6 release time (public)', async () => { await get('/api/public/ZZALP/release-time'); });
+for (const email of ['agent@zzalp.demo', 'harbour@zzalp.demo', 'customs@zzbet.demo']) {
   await check(`login + data as ${email}`, async () => {
     const tok = await login(email);
     const calls = await get('/api/vessel-calls', tok);
@@ -33,9 +33,9 @@ for (const email of ['agent@rocnd.demo', 'harbour@rocnd.demo', 'customs@ngapp.de
   });
 }
 await check('tenant isolation', async () => {
-  const tok = await login('agent@ngapp.demo');
+  const tok = await login('agent@zzbet.demo');
   const calls = await get('/api/vessel-calls', tok);
-  if (calls.some((c) => !c.call_no.startsWith('NGAPP'))) throw new Error('foreign port data visible');
+  if (calls.some((c) => !c.call_no.startsWith('ZZBET'))) throw new Error('foreign port data visible');
 });
 if (failed) { console.error(`${failed} smoke check(s) failed`); process.exit(1); }
 console.log('all smoke checks passed');
