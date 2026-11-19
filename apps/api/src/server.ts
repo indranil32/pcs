@@ -55,7 +55,7 @@ export async function buildApp(opts: { logger?: boolean; gated?: boolean } = {})
     await authenticate(req);
   });
 
-  app.get('/health', { config: { public: true } }, async () => ({ status: !gated || lifecycle.ready ? 'ok' : 'starting', service: 'pcs-api', time: new Date().toISOString() }));
+  app.get('/health', { config: { public: true } }, async () => ({ status: !gated || lifecycle.ready ? 'ok' : 'starting', service: 'pcs-api', version: process.env.APP_VERSION ?? 'dev', time: new Date().toISOString() }));
   app.get('/ready', { config: { public: true } }, async (_req, reply) => reply.status(!gated || lifecycle.ready ? 200 : 503).send({ ready: !gated || lifecycle.ready }));
   // Block API traffic until migrations/seed have finished
   app.addHook('onRequest', async (req, reply) => {
