@@ -147,7 +147,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DEMO_PASSWORD', secretRef: 'demo-password' }
           ] : [])
           probes: [
-            { type: 'Readiness', httpGet: { path: '/ready', port: 4000 }, initialDelaySeconds: 10, periodSeconds: 15, failureThreshold: 120 }
+            { type: 'Readiness', httpGet: { path: '/ready', port: 4000 }, initialDelaySeconds: 10, periodSeconds: 30, failureThreshold: 48 }
             { type: 'Liveness', httpGet: { path: '/health', port: 4000 }, initialDelaySeconds: 60, periodSeconds: 30 }
           ]
         }
