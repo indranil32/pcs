@@ -107,10 +107,18 @@ One-time setup:
    `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `ESG_RESOURCE_GROUP`. Optionally add a
    secret `PCS_DEMO_PASSWORD`; otherwise one is generated. Read it with
    `az containerapp secret show -g rg-pcs-dev -n <app> --secret-name demo-password`.
-3. Make the GHCR package `ghcr.io/indranil32/pcs` **public**, as for port-esg, then re-run the workflow.
+3. GitHub now sends an **ID-based OIDC subject** (`repo:<owner>@<ownerId>/<repo>@<repoId>:environment:azure-dev`).
+   If Azure login fails with AADSTS700213, add a federated credential with the subject shown in the error.
+4. Make the GHCR package `ghcr.io/indranil32/pcs` **public**, as for port-esg, then re-run the workflow.
 
 Until the variables exist, the deploy job skips with a warning, so CI still passes. `infra/prod.bicepparam` holds
 production settings (UAE North, General Purpose PostgreSQL, no demo seed, no AIS simulator).
+
+## Live demo (Azure, dev)
+
+https://ca-pcsdev-tzfhzwahj7vd6.redplant-0c2283f6.centralindia.azurecontainerapps.io (synthetic data). Demo users
+`<role>@rocnd.demo` / `<role>@ngapp.demo`; read the password with
+`az containerapp secret show -g rg-pcs-dev -n ca-pcsdev-tzfhzwahj7vd6 --secret-name demo-password --query value -o tsv`.
 
 ## Roadmap to production
 
