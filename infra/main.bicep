@@ -140,8 +140,8 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DATABASE_URL', secretRef: 'database-url' }
             { name: 'APP_DB_PASSWORD', secretRef: 'app-db-password' }
             { name: 'JWT_SECRET', secretRef: 'jwt-secret' }
-            { name: 'SEED_DEMO_DATA', value: string(seedDemoData) }
-            { name: 'AIS_SIMULATOR', value: string(aisSimulator) }
+            { name: 'SEED_DEMO_DATA', value: seedDemoData ? 'true' : 'false' }
+            { name: 'AIS_SIMULATOR', value: aisSimulator ? 'true' : 'false' }
             { name: 'CORS_ORIGIN', value: corsOrigin == '' ? 'false' : corsOrigin }
           ], demoPassword != '' ? [
             { name: 'DEMO_PASSWORD', secretRef: 'demo-password' }

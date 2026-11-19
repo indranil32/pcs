@@ -13,7 +13,7 @@ try {
     const { migrate } = await import('./db/migrate.js');
     await migrate((m) => app.log.info(m));
   }
-  if (process.env.SEED_DEMO_DATA === 'true') {
+  if (process.env.SEED_DEMO_DATA?.toLowerCase() === 'true') {
     const { seed } = await import('./db/seed.js');
     await seed({ log: (m) => app.log.info(m) });
   }

@@ -8,7 +8,7 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET ?? 'dev-only-change-me-in-production-0123456789',
   jwtTtl: process.env.JWT_TTL ?? '12h',
   corsOrigin: ((v) => (v === undefined || v === 'true' ? true : v === 'false' ? false : v.split(',')))(process.env.CORS_ORIGIN) as boolean | string[],
-  workers: process.env.WORKERS !== 'false',
-  aisSimulator: process.env.AIS_SIMULATOR !== 'false',
+  workers: process.env.WORKERS?.toLowerCase() !== 'false',
+  aisSimulator: process.env.AIS_SIMULATOR?.toLowerCase() !== 'false',
   logLevel: process.env.LOG_LEVEL ?? 'info',
 };
